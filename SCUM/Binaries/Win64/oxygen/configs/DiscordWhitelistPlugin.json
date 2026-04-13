@@ -1,0 +1,8 @@
+{
+  "Enabled": true,
+  "WhitelistFilePath": "C:\\scumserver\\whitelist_scum.txt",
+  "BypassPermission": "whitelist.bypass",
+  "DiscordWebhookUrl": "https://discord.com/api/webhooks/1482371414920138854/FQjaE7huLYkXoaLaiNhRX2eIA1GQOZt_bQgv2VtwDPjHQ3W4OUl9IVjXDb36ItN7KeVw",
+  "DiscordInviteLink": "discord.gg/Fu3497ZGM9",
+  "CountdownSeconds": 15
+}

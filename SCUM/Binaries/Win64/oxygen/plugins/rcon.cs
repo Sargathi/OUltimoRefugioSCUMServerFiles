@@ -1,0 +1,295 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading.Tasks;
+using Oxygen.Csharp.API;
+using Oxygen.Csharp.Core;
+
+[Info("Custom RCON", "jEMIXS", "1.0.0")]
+public class CustomRconPlugin : OxygenPlugin
+{
+    string rconPassword = "Mulacum111$$"; // rcon password
+    int rconPort = 28015; // rcon port
+
+    private RconServer _rcon;
+
+    public override void OnLoad()
+    {
+        try
+        {
+            _rcon = new RconServer(rconPort, rconPassword);
+
+            _rcon.OnCommandReceived += HandleRconCommand;
+
+            _rcon.Start();
+            
+            Console.WriteLine($"[RCON Plugin] started {rconPort}!");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[RCON Plugin] fail: {ex.Message}");
+        }
+    }
+
+    public override void OnUnload()
+    {
+        Console.WriteLine("[RCON Plugin] stopped...");
+        
+        if (_rcon != null)
+        {
+            _rcon.OnCommandReceived -= HandleRconCommand;
+            _rcon.Stop();
+            _rcon = null;
+        }
+    }
+
+    private async Task<string> HandleRconCommand(string command)
+    {
+        try 
+        {
+            string cmdLower = command.Trim().ToLower();
+            if (cmdLower == "listplayers" || cmdLower == "#listplayers")
+            {
+                var players = Server.AllPlayers;
+                if (players == null || !players.Any())
+                    return "No players";
+
+                var sb = new StringBuilder();
+                foreach (var p in players)
+                {
+                    sb.AppendLine($"{p.SteamId} - {p.Name}");
+                }
+                return sb.ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[RCON Plugin] ListPlayers Error: {ex.Message}");
+            return $"Error: {ex.Message}";
+        }
+
+        var result = await Server.ProcessCommandAsync(command);
+        return result.Message;
+    }
+}
+
+public class RconServer
+{
+    private const int SERVERDATA_AUTH = 3;
+    private const int SERVERDATA_EXECCOMMAND = 2;
+    private const int SERVERDATA_AUTH_RESPONSE = 2;
+    private const int SERVERDATA_RESPONSE_VALUE = 0;
+
+    private TcpListener _listener;
+    private bool _isRunning;
+    private readonly int _port;
+    private readonly string _password;
+
+    public event Func<string, Task<string>> OnCommandReceived;
+
+    public RconServer(int port, string password)
+    {
+        _port = port;
+        _password = password;
+    }
+
+    public void Start()
+    {
+        if (_isRunning) return;
+
+        _listener = new TcpListener(IPAddress.Any, _port);
+        _listener.Start();
+        _isRunning = true;
+
+        Task.Run(AcceptClientsAsync);
+    }
+
+    public void Stop()
+    {
+        _isRunning = false;
+        _listener?.Stop();
+    }
+
+    private async Task AcceptClientsAsync()
+    {
+        while (_isRunning)
+        {
+            try
+            {
+                TcpClient client = await _listener.AcceptTcpClientAsync();
+                _ = Task.Run(() => HandleClientAsync(client));
+            }
+            catch (ObjectDisposedException) { break; }
+            catch (Exception ex) { Console.WriteLine($"[RCON] FAIL: {ex.Message}"); }
+        }
+    }
+
+    private async Task HandleClientAsync(TcpClient client)
+    {
+        using NetworkStream stream = client.GetStream();
+        bool isAuthenticated = false;
+
+        try
+        {
+            while (client.Connected && _isRunning)
+            {
+                byte[] sizeBuffer = new byte[4];
+                
+                int sizeBytesRead = 0;
+                while (sizeBytesRead < 4)
+                {
+                    int read = await stream.ReadAsync(sizeBuffer, sizeBytesRead, 4 - sizeBytesRead);
+                    if (read == 0) break;
+                    sizeBytesRead += read;
+                }
+                if (sizeBytesRead < 4) break;
+
+                int packetSize = BitConverter.ToInt32(sizeBuffer, 0);
+                if (packetSize < 10 || packetSize > 4096) break;
+
+                byte[] packetBuffer = new byte[packetSize];
+                int readBytes = 0;
+                
+                while (readBytes < packetSize)
+                {
+                    int currentRead = await stream.ReadAsync(packetBuffer, readBytes, packetSize - readBytes);
+                    if (currentRead == 0) break;
+                    readBytes += currentRead;
+                }
+                if (readBytes < packetSize) break; 
+
+                using MemoryStream ms = new MemoryStream(packetBuffer);
+                using BinaryReader reader = new BinaryReader(ms, Encoding.UTF8);
+
+                int requestId = reader.ReadInt32();
+                int requestType = reader.ReadInt32();
+                string body = ReadNullTerminatedString(reader);
+
+                if (requestType == SERVERDATA_AUTH)
+                {
+                    if (body == _password)
+                    {
+                        isAuthenticated = true;
+                        
+                        await SendPacketAsync(stream, requestId, SERVERDATA_RESPONSE_VALUE, "");
+                        
+                        await SendPacketAsync(stream, requestId, SERVERDATA_AUTH_RESPONSE, "");
+                    }
+                    else
+                    {
+                        await SendPacketAsync(stream, -1, SERVERDATA_AUTH_RESPONSE, "");
+                        break;
+                    }
+                }
+                else if (requestType == SERVERDATA_EXECCOMMAND)
+                {
+                    if (!isAuthenticated) break;
+
+                    string responseMessage = "Receive command but not exec.\n";
+                    if (OnCommandReceived != null)
+                    {
+                        try { responseMessage = await OnCommandReceived.Invoke(body); }
+                        catch (Exception ex) { responseMessage = $"Fail: {ex.Message}\n"; }
+                    }
+
+                    await SendSmartChunkedResponseAsync(stream, requestId, responseMessage);
+                }
+                else if (requestType == SERVERDATA_RESPONSE_VALUE)
+                {
+                    await SendPacketAsync(stream, requestId, SERVERDATA_RESPONSE_VALUE, body);
+                }
+            }
+        }
+        catch { }
+        finally { client.Close(); }
+    }
+
+    private async Task SendSmartChunkedResponseAsync(NetworkStream stream, int requestId, string body)
+    {
+        if (string.IsNullOrEmpty(body))
+        {
+            await SendPacketAsync(stream, requestId, SERVERDATA_RESPONSE_VALUE, "");
+            return;
+        }
+
+        const int maxCharsPerPacket = 3900; 
+        
+        string[] lines = body.Split(new[] { '\n' }, StringSplitOptions.None);
+        StringBuilder currentChunk = new StringBuilder();
+
+        foreach (string line in lines)
+        {
+            if (line.Length > maxCharsPerPacket)
+            {
+                if (currentChunk.Length > 0)
+                {
+                    await SendPacketAsync(stream, requestId, SERVERDATA_RESPONSE_VALUE, currentChunk.ToString());
+                    currentChunk.Clear();
+                }
+
+                for (int i = 0; i < line.Length; i += maxCharsPerPacket)
+                {
+                    int len = Math.Min(maxCharsPerPacket, line.Length - i);
+                    string part = line.Substring(i, len);
+                    
+                    if (i + maxCharsPerPacket >= line.Length) part += "\n";
+                        
+                    await SendPacketAsync(stream, requestId, SERVERDATA_RESPONSE_VALUE, part);
+                }
+            }
+            else
+            {
+                if (currentChunk.Length + line.Length + 1 > maxCharsPerPacket)
+                {
+                    await SendPacketAsync(stream, requestId, SERVERDATA_RESPONSE_VALUE, currentChunk.ToString());
+                    currentChunk.Clear();
+                }
+                currentChunk.Append(line).Append('\n');
+            }
+        }
+
+        if (currentChunk.Length > 0)
+        {
+            if (currentChunk.Length > 0 && currentChunk[currentChunk.Length - 1] == '\n')
+            {
+                currentChunk.Length--;
+            }
+                
+            await SendPacketAsync(stream, requestId, SERVERDATA_RESPONSE_VALUE, currentChunk.ToString());
+        }
+    }
+
+    private async Task SendPacketAsync(NetworkStream stream, int id, int type, string body)
+    {
+        byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
+        int packetSize = 4 + 4 + bodyBytes.Length + 1 + 1;
+
+        using MemoryStream ms = new MemoryStream();
+        using BinaryWriter writer = new BinaryWriter(ms);
+
+        writer.Write(packetSize);
+        writer.Write(id);
+        writer.Write(type);
+        writer.Write(bodyBytes);
+        writer.Write((byte)0);
+        writer.Write((byte)0);
+
+        byte[] finalPacket = ms.ToArray();
+        await stream.WriteAsync(finalPacket, 0, finalPacket.Length);
+    }
+
+    private string ReadNullTerminatedString(BinaryReader reader)
+    {
+        List<byte> bytes = new List<byte>();
+        byte b;
+        while (reader.BaseStream.Position < reader.BaseStream.Length && (b = reader.ReadByte()) != 0)
+        {
+            bytes.Add(b);
+        }
+        return Encoding.UTF8.GetString(bytes.ToArray());
+    }
+}

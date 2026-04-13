@@ -1,0 +1,79 @@
+{
+  "Enabled": true,
+  "WhitelistFilePath": "C:\\scumserver\\whitelist_scum.txt",
+  "VipPrataFilePath": "C:\\scumserver\\vip_prata.txt",
+  "VipOuroFilePath": "C:\\scumserver\\vip_ouro.txt",
+  "Message": "Seus itens VIP foram entregues. Bom jogo!",
+  "WlKitMessage": "Bem-vindo! Seu kit de Whitelist foi entregue. Bom jogo!",
+  "KitCooldownMinutes": 0,
+  "MaleUnderwearItemId": "Boxer_Briefs_01",
+  "FemaleBraItemId": "F_Undershirt_Bra_01",
+  "FemaleUnderwearItemId": "Underpants_01",
+  "SocksItemId": "Sock_01",
+  "VipOuroBackpackItemId": "Backpack_02_05",
+  "WhitelistSet": {
+    "Equipment": [
+      "Bamboo_Hat_02",
+      "Beijing_Shoes_04",
+      "Tang_pants_04",
+      "Tang_shirt_04"
+    ],
+    "Inventory": [
+      "Apple_2",
+      "Date",
+      "WaterBottle",
+      "Rag",
+      "Rag",
+      "Rag",
+      "Rag",
+      "Rag",
+      "Rag",
+      "Credit_Card_Starter",
+      "Improvised_Wooden_Spear"
+    ]
+  },
+  "VipPrataSet": {
+    "Equipment": [
+      "Military_Boonie_Hat_07",
+      "Camouflage_Jacket_01",
+      "Hiking_Boots_03",
+      "Open_Finger_Gloves_01",
+      "Short_Trousers_01_05",
+      "Improvised_Quiver_02_Rags"
+    ],
+    "Inventory": [
+      "Improvised_Bow",
+      "Wooden_ArrowStoneTip",
+      "Wooden_ArrowStoneTip",
+      "Wooden_ArrowStoneTip",
+      "Wooden_ArrowStoneTip",
+      "Wooden_ArrowStoneTip",
+      "Wooden_ArrowStoneTip",
+      "2H_Baseball_Bat_With_Wire",
+      "MRE_Stew",
+      "Emergency_Bandage_Big"
+    ]
+  },
+  "VipOuroSet": {
+    "Equipment": [
+      "Military_Boonie_Hat_07",
+      "Camouflage_Jacket_01",
+      "Hiking_Boots_03",
+      "Open_Finger_Gloves_01",
+      "Short_Trousers_01_05",
+      "Improvised_Quiver_02_Rags"
+    ],
+    "Inventory": [
+      "Recurve_Bow",
+      "Wooden_ArrowMetalTip",
+      "Wooden_ArrowMetalTip",
+      "Wooden_ArrowMetalTip",
+      "Wooden_ArrowMetalTip",
+      "Wooden_ArrowMetalTip",
+      "Wooden_ArrowMetalTip",
+      "2H_Baseball_Bat_With_Wire",
+      "MRE_Stew",
+      "Emergency_Bandage_Big"
+    ]
+  }
+}

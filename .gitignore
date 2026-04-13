@@ -1,0 +1,50 @@
+# --- Binários e Arquivos de Sistema (NUNCA subir) ---
+Engine/
+SCUM/Content/Paks/
+# --- Binários (Ignorar a pasta, mas abrir exceção para os plugins) ---
+SCUM/Binaries/*
+!SCUM/Binaries/Win64/
+!SCUM/Binaries/Win64/oxygen/
+!SCUM/Binaries/Win64/oxygen/plugins/
+!SCUM/Binaries/Win64/oxygen/configs/
+
+# Garante que mesmo dentro dessas pastas, arquivos .exe e .dll continuem ignorados
+SCUM/Binaries/**/*.exe
+SCUM/Binaries/**/*.dll
+_CommonRedist/
+steamapps/
+*.exe
+*.dll
+*.pdb
+*.ttf
+*.tps
+*.cab
+*.index
+*.sig
+
+# --- Dados Dinâmicos e Bancos de Dados ---
+# Ignora toda a pasta de saves e bancos de dados sqlite
+SCUM/Saved/SaveFiles/
+*.db
+*.db-wal
+*.db-shm
+*.db-backup
+
+# --- Logs e Crashes ---
+SCUM/Saved/Logs/
+SCUM/Saved/Crashes/
+SCUM/Saved/Config/CrashReportClient/
+*.log
+*.bak
+*.BACKUP
+*.iniBACKUP
+
+# --- Backups e Zips ---
+backup/
+*.zip
+
+# --- Arquivos de Lista que mudam muito ---
+# Como você pediu para ignorar listas de VIP e Whitelist
+vip_ouro.txt
+vip_prata.txt
+whitelist_scum.txt

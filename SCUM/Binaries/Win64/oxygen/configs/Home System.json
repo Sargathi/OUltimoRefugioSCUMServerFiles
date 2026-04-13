@@ -1,0 +1,11 @@
+{
+  "DefaultMaxHomes": 0,
+  "VipPrataMaxHomes": 1,
+  "VipOuroMaxHomes": 2,
+  "TeleportDelaySeconds": 30,
+  "TeleportCooldownMinutes": 40,
+  "VipPrataPermission": "sethome.vip_prata",
+  "VipOuroPermission": "sethome.vip_ouro",
+  "VipPrataFilePath": "C:\\scumserver\\vip_prata.txt",
+  "VipOuroFilePath": "C:\\scumserver\\vip_ouro.txt"
+}

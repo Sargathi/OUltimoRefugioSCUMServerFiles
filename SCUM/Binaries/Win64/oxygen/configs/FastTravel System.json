@@ -1,0 +1,59 @@
+{
+  "TransferCooldownMinutes": 60,
+  "RatePerMeter": 0.5,
+  "TeleportDelaySeconds": 5,
+  "Outposts": [
+    {
+      "DisplayName": "A0 Trader",
+      "CommandAlias": "a0",
+      "CenterZone": [
+        -621973.438,
+        -557260.438
+      ],
+      "ArrivalPoint": [
+        -621973.438,
+        -557260.438,
+        50
+      ]
+    },
+    {
+      "DisplayName": "B4 Trader",
+      "CommandAlias": "b4",
+      "CenterZone": [
+        571278.25,
+        -224427.219
+      ],
+      "ArrivalPoint": [
+        571278.25,
+        -224427.219,
+        50
+      ]
+    },
+    {
+      "DisplayName": "C2 Trader",
+      "CommandAlias": "c2",
+      "CenterZone": [
+        -153247.156,
+        289822.219
+      ],
+      "ArrivalPoint": [
+        -153247.156,
+        289822.219,
+        50
+      ]
+    },
+    {
+      "DisplayName": "Z3 Trader",
+      "CommandAlias": "z3",
+      "CenterZone": [
+        24006.01,
+        -676488.25
+      ],
+      "ArrivalPoint": [
+        24006.01,
+        -676488.25,
+        50
+      ]
+    }
+  ]
+}

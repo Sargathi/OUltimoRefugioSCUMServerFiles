@@ -1,0 +1,5 @@
+{
+  "Enabled": true,
+  "KickMessage": "VPN or Proxy connections are not allowed on this server.",
+  "BypassPermission": "antivpn.bypass"
+}

@@ -1,0 +1,9 @@
+{
+  "Enabled": true,
+  "ForbiddenItems": [
+    "Weapon_M1887_С",
+    "Weapon_RPG7_C"
+  ],
+  "BypassPermission": "items.bypass",
+  "BlockMessage": "You are not allowed to use this item!"
+}

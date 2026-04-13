@@ -1,0 +1,37 @@
+{
+  "Groups": {
+    "default": {
+      "Title": "Default Player",
+      "Rank": 0,
+      "ParentGroup": "",
+      "Permissions": []
+    },
+    "vip_prata": {
+      "Title": "VIP Prata",
+      "Rank": 10,
+      "ParentGroup": "default",
+      "Permissions": [
+        "vip.prata",
+        "sethome.vip_prata"
+      ]
+    },
+    "vip_ouro": {
+      "Title": "VIP Ouro",
+      "Rank": 20,
+      "ParentGroup": "default",
+      "Permissions": [
+        "vip.ouro",
+        "sethome.vip_ouro",
+        "sethome.vip_prata"
+      ]
+    },
+    "admin": {
+      "Title": "Server Admin",
+      "Rank": 100,
+      "ParentGroup": "",
+      "Permissions": [
+        "*"
+      ]
+    }
+  }
+}
