@@ -7,7 +7,7 @@ using Oxygen.Csharp.API;
 using Oxygen.Csharp.Core;
 
 // ============================================================
-//  Custom Respawn Items  v4.0.0
+//  Custom Respawn Items  v4.0.1
 //  O Último Refúgio — SCUM Server
 //
 //  Tiers de respawn (verificados via arquivo de texto, sem cache):
@@ -51,6 +51,7 @@ namespace SpawnSystem
         public string FemaleUnderwearItemId { get; set; } = "Underpants_01";
         public string SocksItemId          { get; set; } = "Sock_01";
         public string VipOuroBackpackItemId { get; set; } = "Military_Backpack_03_07";
+        public int VipOuroBackpackEquipDelaySeconds { get; set; } = 35;
 
         public SpawnSettings WhitelistSet { get; set; } = new SpawnSettings
         {
@@ -134,12 +135,13 @@ namespace SpawnSystem
 
     #endregion
 
-    [Info("Custom Respawn Items", "OUltimoRefugio", "4.0.0")]
+    [Info("Custom Respawn Items", "OUltimoRefugio", "4.0.1")]
     [Description("Tiers de respawn via arquivos de texto: vanilla (sem WL), basico (WL), prata, ouro.")]
     public class CustomRespawnPlugin : OxygenPlugin
     {
         private RespawnConfig _cfg;
         private Dictionary<string, long> _kitCooldowns;
+        private Dictionary<string, long> _vipOuroBackpackTokens;
 
         public override void OnLoad()
         {
@@ -148,8 +150,9 @@ namespace SpawnSystem
 
             _kitCooldowns = LoadData<Dictionary<string, long>>("SpawnKitCooldowns")
                             ?? new Dictionary<string, long>();
+            _vipOuroBackpackTokens = new Dictionary<string, long>();
 
-            Console.WriteLine($"[SpawnSystem] v4.0.0 carregado. Cooldown: {_cfg.KitCooldownMinutes} min.");
+            Console.WriteLine($"[SpawnSystem] v4.0.1 carregado. Cooldown: {_cfg.KitCooldownMinutes} min.");
         }
 
         public override void OnUnload()
@@ -200,12 +203,13 @@ namespace SpawnSystem
                 player.EquipItem(item);
             }
 
-            // Mochila do Ouro: entrega no inventário (não equipa no slot das costas)
-            // para não substituir o paraquedas durante a queda.
+            // Mochila do Ouro: agenda equipar com atraso (após a queda)
+            // para não substituir o paraquedas no ar.
             if (tier == "ouro" && !string.IsNullOrWhiteSpace(_cfg.VipOuroBackpackItemId))
             {
-                player.GiveItem(_cfg.VipOuroBackpackItemId);
-                Console.WriteLine($"[SpawnSystem] Mochila '{_cfg.VipOuroBackpackItemId}' entregue para {player.Name}.");
+                long token = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                _vipOuroBackpackTokens[steamId] = token;
+                _ = DeliverVipOuroBackpackWhenSafeAsync(player, steamId, player.Name, _cfg.VipOuroBackpackItemId, token);
             }
 
             // ── Cooldown para itens de inventário ────────────────────────────
@@ -254,6 +258,30 @@ namespace SpawnSystem
             {
                 Console.WriteLine($"[SpawnSystem] Erro ao ler {filePath}: {ex.Message}");
                 return false;
+            }
+        }
+
+        private async Task DeliverVipOuroBackpackWhenSafeAsync(PlayerBase player, string steamId, string playerName, string backpackItemId, long token)
+        {
+            try
+            {
+                int delayMs = Math.Max(0, _cfg.VipOuroBackpackEquipDelaySeconds) * 1000;
+                if (delayMs > 0)
+                    await Task.Delay(delayMs);
+
+                if (!_vipOuroBackpackTokens.TryGetValue(steamId, out long currentToken) || currentToken != token)
+                    return;
+
+                if (player == null || string.IsNullOrEmpty(player.SteamId)) return;
+                if (!player.SteamId.Equals(steamId, StringComparison.OrdinalIgnoreCase)) return;
+
+                player.EquipItem(backpackItemId);
+                _vipOuroBackpackTokens.Remove(steamId);
+                Console.WriteLine($"[SpawnSystem] Mochila '{backpackItemId}' equipada para {playerName} apos {Math.Max(0, _cfg.VipOuroBackpackEquipDelaySeconds)}s.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SpawnSystem] Falha ao equipar mochila do VIP Ouro para {playerName}: {ex.Message}");
             }
         }
 
