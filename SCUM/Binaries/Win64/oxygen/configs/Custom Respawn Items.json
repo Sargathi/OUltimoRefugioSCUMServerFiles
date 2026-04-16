@@ -5,7 +5,7 @@
   "VipOuroFilePath": "C:\\scumserver\\vip_ouro.txt",
   "Message": "Seus itens VIP foram entregues. Bom jogo!",
   "WlKitMessage": "Bem-vindo! Seu kit de Whitelist foi entregue. Bom jogo!",
-  "KitCooldownMinutes": 0,
+  "KitCooldownMinutes": 40,
   "MaleUnderwearItemId": "Boxer_Briefs_01",
   "FemaleBraItemId": "F_Undershirt_Bra_01",
   "FemaleUnderwearItemId": "Underpants_01",
