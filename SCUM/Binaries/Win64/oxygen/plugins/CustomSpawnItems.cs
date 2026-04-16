@@ -45,7 +45,7 @@ namespace SpawnSystem
         public string VipOuroFilePath      { get; set; } = @"C:\scumserver\vip_ouro.txt";
         public string Message              { get; set; } = "Seus itens VIP foram entregues. Bom jogo!";
         public string WlKitMessage         { get; set; } = "Bem-vindo! Seu kit de Whitelist foi entregue. Bom jogo!";
-        public int    KitCooldownMinutes   { get; set; } = 0;
+        public int    KitCooldownMinutes   { get; set; } = 40;
         public string MaleUnderwearItemId  { get; set; } = "Boxer_Briefs_01";
         public string FemaleBraItemId      { get; set; } = "F_Undershirt_Bra_01";
         public string FemaleUnderwearItemId { get; set; } = "Underpants_01";
