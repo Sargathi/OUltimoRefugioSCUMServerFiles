@@ -50,3 +50,6 @@ backup/
 vip_ouro.txt
 vip_prata.txt
 whitelist_scum.txtSCUM/Binaries/Win64/config/config.vdf
+NameSteams.txt
+whitelist_scum.txt
+SCUM/Binaries/Win64/config/
