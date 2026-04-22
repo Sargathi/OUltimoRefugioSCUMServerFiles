@@ -59,7 +59,7 @@ namespace BlackMarketSystem
 
     #endregion
 
-    [Info("Black Market", "OUltimoRefugio", "2.5.0")]
+[Info("Black Market", "OUltimoRefugio", "2.6.0")]
     [Description("Mercado negro para itens bloqueados nos NPC Traders.")]
     public class BlackMarketPlugin : OxygenPlugin
     {
@@ -73,7 +73,7 @@ namespace BlackMarketSystem
             _cfg = LoadConfig<BlackMarketConfig>() ?? new BlackMarketConfig();
             SaveConfig(_cfg);
 
-            Console.WriteLine("[BlackMarket] v2.5.0 carregado. Zonas: " + _cfg.Zones.Count + ", Itens: " + _cfg.Items.Count);
+            Console.WriteLine("[BlackMarket] v2.6.0 carregado. Zonas: " + _cfg.Zones.Count + ", Itens: " + _cfg.Items.Count);
         }
 
         public override void OnUnload()
@@ -371,105 +371,62 @@ namespace BlackMarketSystem
                 return;
             }
 
-            // Tenta descobrir o tamanho de cada stack via reflection (Amount, StackSize,
-            // Quantity, Count, StackCount, ItemsCount…). Se encontrar, podemos planejar
-            // a venda sem destruir stacks extras.
-            int totalEstimado = 0;
-            var stackSizes = new List<int>(matching.Count);
-            bool stackPropFunciona = true;
+            // Segurança anti-perda:
+            // Só prossegue se conseguir ler o tamanho real dos stacks.
+            // Se a leitura falhar, cancela a venda (não destrói nada).
+            var stackEntries = new List<(Item Item, int Size)>(matching.Count);
             foreach (var it in matching)
             {
                 int sz = ReadStackAmount(it);
-                if (sz <= 0) { stackPropFunciona = false; break; }
-                stackSizes.Add(sz);
-                totalEstimado += sz;
+                if (sz <= 0)
+                {
+                    player.Reply("[Mercado Negro] Nao foi possivel ler o tamanho do stack. Venda cancelada para evitar perda.", Color.Red);
+                    Console.WriteLine("[BlackMarket] Venda cancelada para " + player.Name + ": stack size desconhecido de " + itemCfg.Code);
+                    return;
+                }
+                stackEntries.Add((it, sz));
             }
 
+            int totalDisponivel = stackEntries.Sum(s => s.Size);
             int quer = pedidos;
             if (itemCfg.MaxPerSale > 0 && itemCfg.MaxPerSale < quer) quer = itemCfg.MaxPerSale;
+            if (quer > totalDisponivel) quer = totalDisponivel;
+
+            if (quer <= 0)
+            {
+                player.Reply("[Mercado Negro] Nada para vender.", Color.Orange);
+                return;
+            }
+
+            var stackSizes = stackEntries.Select(s => s.Size).ToList();
+            var selectedIndices = SelectStacksUpToTarget(stackSizes, quer);
+            int planejados = selectedIndices.Sum(i => stackSizes[i]);
+            if (planejados <= 0)
+            {
+                player.Reply("[Mercado Negro] Nao foi possivel montar venda sem exceder a quantidade pedida.", Color.Orange);
+                return;
+            }
+
+            Console.WriteLine("[BlackMarket] Stack sizes detectados para " + itemCfg.Code +
+                ": [" + string.Join(",", stackSizes) + "] total=" + totalDisponivel +
+                " pedido=" + quer + " planejado=" + planejados);
 
             int removidos = 0;
-            int restante  = quer;
-
-            if (stackPropFunciona)
+            foreach (int idx in selectedIndices)
             {
-                // Caminho feliz: sei o tamanho de cada stack. Ordena ASCENDENTE para
-                // consumir stacks pequenos primeiro — minimiza "over-kill" no último stack.
-                if (totalEstimado < quer) quer = totalEstimado;
-                restante = quer;
-
-                var indices = Enumerable.Range(0, matching.Count)
-                                        .OrderBy(i => stackSizes[i])
-                                        .ToList();
-
-                Console.WriteLine("[BlackMarket] Stack sizes detectados para " + itemCfg.Code +
-                    ": [" + string.Join(",", stackSizes) + "] total=" + totalEstimado +
-                    " quer=" + quer);
-
-                foreach (int idx in indices)
+                try
                 {
-                    if (restante <= 0) break;
-                    try
-                    {
-                        matching[idx].Destroy();
-                        removidos += stackSizes[idx];
-                        restante  -= stackSizes[idx];
-                        Console.WriteLine("[BlackMarket] Destruído stack de " + stackSizes[idx] +
-                            ". removidos=" + removidos + " restante=" + restante);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine("[BlackMarket] Destroy falhou: " + ex.Message);
-                        break;
-                    }
+                    stackEntries[idx].Item.Destroy();
+                    removidos += stackEntries[idx].Size;
                 }
-            }
-            else
-            {
-                // Fallback: a API não expôs o tamanho do stack via reflection.
-                // Destruímos um por um com Task.Delay entre cada chamada para o Oxygen
-                // processar a remoção, e medimos a diferença antes/depois.
-                int totalAntes = CountInInventory(player, itemCfg.Code);
-                int anterior   = totalAntes;
-                if (totalAntes < quer) quer = totalAntes;
-                restante = quer;
-
-                Console.WriteLine("[BlackMarket] stackProp=off. totalAntes=" + totalAntes +
-                    " quer=" + quer + " matchingCount=" + matching.Count);
-
-                foreach (var invItem in matching)
+                catch (Exception ex)
                 {
-                    if (restante <= 0) break;
-                    try
-                    {
-                        invItem.Destroy();
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine("[BlackMarket] Destroy falhou: " + ex.Message);
-                        break;
-                    }
-
-                    // Dá tempo do Oxygen processar a remoção antes de recontar.
-                    await Task.Delay(200);
-
-                    int atual = CountInInventory(player, itemCfg.Code);
-                    int removidoNesseStack = anterior - atual;
-                    if (removidoNesseStack <= 0)
-                    {
-                        Console.WriteLine("[BlackMarket] Destroy não alterou a contagem de " +
-                            itemCfg.Code + " mesmo após 200ms (antes=" + anterior +
-                            " agora=" + atual + "). Abortando com " + removidos + " já destruídos.");
-                        break;
-                    }
-
-                    removidos += removidoNesseStack;
-                    restante  -= removidoNesseStack;
-                    anterior   = atual;
-
-                    Console.WriteLine("[BlackMarket] Stack destruído (-" + removidoNesseStack +
-                        "). removidos=" + removidos + " restante=" + restante);
+                    Console.WriteLine("[BlackMarket] Destroy falhou: " + ex.Message);
+                    break;
                 }
+
+                // Pequeno respiro para o Oxygen processar o Destroy com estabilidade.
+                await Task.Delay(50);
             }
 
             if (removidos <= 0)
@@ -508,46 +465,99 @@ namespace BlackMarketSystem
         private static readonly string[] _stackPropNames = new[]
         {
             "Amount", "StackSize", "StackCount", "Stack",
-            "Quantity", "ItemsCount", "Count",
-            "CurrentStack", "CurrentAmount"
+            "Quantity", "CurrentStack", "CurrentAmount",
+            "Charges", "Uses"
         };
 
         private static int ReadStackAmount(Item item)
         {
             if (item == null) return -1;
             Type t = item.GetType();
+
             foreach (var name in _stackPropNames)
             {
                 var p = t.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (p == null) continue;
-                // Ignora Contents.Count etc. — só aceita números.
-                if (p.PropertyType != typeof(int) &&
-                    p.PropertyType != typeof(short) &&
-                    p.PropertyType != typeof(long) &&
-                    p.PropertyType != typeof(float) &&
-                    p.PropertyType != typeof(double)) continue;
+                if (p != null && IsNumericType(p.PropertyType))
+                {
+                    try
+                    {
+                        int n = ToPositiveInt(p.GetValue(item));
+                        if (n > 0) return n;
+                    }
+                    catch { }
+                }
+
+                var f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (f != null && IsNumericType(f.FieldType))
+                {
+                    try
+                    {
+                        int n = ToPositiveInt(f.GetValue(item));
+                        if (n > 0) return n;
+                    }
+                    catch { }
+                }
+            }
+
+            foreach (var methodName in new[] { "GetAmount", "GetStackSize", "GetQuantity", "GetCurrentAmount" })
+            {
+                var m = t.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (m == null || !IsNumericType(m.ReturnType)) continue;
                 try
                 {
-                    object v = p.GetValue(item);
-                    if (v == null) continue;
-                    int n = Convert.ToInt32(v);
+                    int n = ToPositiveInt(m.Invoke(item, null));
                     if (n > 0) return n;
                 }
                 catch { }
             }
+
             return -1;
         }
 
-        private int CountInInventory(PlayerBase player, string code)
+        private static bool IsNumericType(Type t)
         {
-            if (player.Inventory == null || player.Inventory.All == null || code == null) return 0;
-            int c = 0;
-            foreach (var invItem in player.Inventory.All)
+            if (t == null) return false;
+            t = Nullable.GetUnderlyingType(t) ?? t;
+            return t == typeof(byte) || t == typeof(sbyte) ||
+                   t == typeof(short) || t == typeof(ushort) ||
+                   t == typeof(int) || t == typeof(uint) ||
+                   t == typeof(long) || t == typeof(ulong) ||
+                   t == typeof(float) || t == typeof(double) ||
+                   t == typeof(decimal);
+        }
+
+        private static int ToPositiveInt(object value)
+        {
+            if (value == null) return -1;
+            int n = Convert.ToInt32(value);
+            return n > 0 ? n : -1;
+        }
+
+        // Seleciona stacks para vender sem ultrapassar o alvo pedido.
+        // Retorna índices dos stacks escolhidos, maximizando quantidade <= target.
+        private static List<int> SelectStacksUpToTarget(IReadOnlyList<int> stackSizes, int target)
+        {
+            var bestBySum = new Dictionary<int, List<int>> { [0] = new List<int>() };
+
+            for (int i = 0; i < stackSizes.Count; i++)
             {
-                if (invItem != null && invItem.Name != null && invItem.Name.Equals(code, StringComparison.OrdinalIgnoreCase))
-                    c++;
+                int size = stackSizes[i];
+                if (size <= 0) continue;
+
+                var snapshot = bestBySum.ToList();
+                foreach (var kv in snapshot)
+                {
+                    int nextSum = kv.Key + size;
+                    if (nextSum > target) continue;
+
+                    var candidate = new List<int>(kv.Value) { i };
+                    if (!bestBySum.TryGetValue(nextSum, out var existing) || candidate.Count < existing.Count)
+                        bestBySum[nextSum] = candidate;
+                }
             }
-            return c;
+
+            int best = bestBySum.Keys.Where(k => k > 0).DefaultIfEmpty(0).Max();
+            return best == 0 ? new List<int>() : bestBySum[best];
         }
 
         private BlackMarketItem ResolveItem(string input)
