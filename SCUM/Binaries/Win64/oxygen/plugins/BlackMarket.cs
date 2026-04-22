@@ -28,6 +28,7 @@ namespace BlackMarketSystem
         public string Label { get; set; } = "";
         public int PricePerUnit { get; set; } = 0;
         public int MaxPerSale { get; set; } = 30;
+        public int FallbackStackAmount { get; set; } = 0;
     }
 
     public class BlackMarketConfig
@@ -36,6 +37,12 @@ namespace BlackMarketSystem
         public int CooldownSeconds { get; set; } = 180;
         public string AdminPermission { get; set; } = "blackmarket.admin";
         public string LogFilePath { get; set; } = @"C:\scumserver\blackmarket_sales.log";
+        public bool UseFallbackStackSizes { get; set; } = true;
+        public Dictionary<string, int> FallbackStackSizes { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Joint01"] = 10,
+            ["Spliff"] = 10
+        };
 
         public List<BlackMarketZone> Zones { get; set; } = new List<BlackMarketZone>
         {
@@ -52,14 +59,14 @@ namespace BlackMarketSystem
 
         public List<BlackMarketItem> Items { get; set; } = new List<BlackMarketItem>
         {
-            new BlackMarketItem { Code = "Joint01", Label = "Baseado", PricePerUnit = 300, MaxPerSale = 30 },
-            new BlackMarketItem { Code = "Spliff",  Label = "Spliff",  PricePerUnit = 150, MaxPerSale = 30 }
+            new BlackMarketItem { Code = "Joint01", Label = "Baseado", PricePerUnit = 300, MaxPerSale = 30, FallbackStackAmount = 10 },
+            new BlackMarketItem { Code = "Spliff",  Label = "Spliff",  PricePerUnit = 150, MaxPerSale = 30, FallbackStackAmount = 10 }
         };
     }
 
     #endregion
 
-[Info("Black Market", "OUltimoRefugio", "2.6.0")]
+[Info("Black Market", "OUltimoRefugio", "2.7.1")]
     [Description("Mercado negro para itens bloqueados nos NPC Traders.")]
     public class BlackMarketPlugin : OxygenPlugin
     {
@@ -73,7 +80,7 @@ namespace BlackMarketSystem
             _cfg = LoadConfig<BlackMarketConfig>() ?? new BlackMarketConfig();
             SaveConfig(_cfg);
 
-            Console.WriteLine("[BlackMarket] v2.6.0 carregado. Zonas: " + _cfg.Zones.Count + ", Itens: " + _cfg.Items.Count);
+            Console.WriteLine("[BlackMarket] v2.7.1 carregado. Zonas: " + _cfg.Zones.Count + ", Itens: " + _cfg.Items.Count);
         }
 
         public override void OnUnload()
@@ -103,7 +110,11 @@ namespace BlackMarketSystem
             string msg = "\n=== MERCADO NEGRO ===\n";
             foreach (var it in _cfg.Items)
             {
-                msg += "- " + it.Label + ": $" + it.PricePerUnit + "/un (max " + it.MaxPerSale + ")\n";
+                int fallback = ResolveFallbackStackAmount(it);
+                string fallbackText = fallback > 0
+                    ? " fallbackStack=" + fallback
+                    : "";
+                msg += "- " + it.Label + ": $" + it.PricePerUnit + "/un (max " + it.MaxPerSale + ")" + fallbackText + "\n";
             }
             msg += "Cooldown: " + _cfg.CooldownSeconds + "s";
             player.Reply(msg, Color.Blue);
@@ -172,15 +183,33 @@ namespace BlackMarketSystem
             // Contagem dos itens configurados, com stack sizes detectados
             foreach (var it in _cfg.Items)
             {
-                var sizes = new List<int>();
+                var sizes = new List<string>();
+                int total = 0;
                 foreach (var invItem in player.Inventory.All)
                 {
                     if (invItem != null && invItem.Name != null && invItem.Name.Equals(it.Code, StringComparison.OrdinalIgnoreCase))
                     {
-                        sizes.Add(ReadStackAmount(invItem));
+                        int sz = ReadStackAmount(invItem);
+                        if (sz > 0)
+                        {
+                            sizes.Add(sz.ToString());
+                            total += sz;
+                        }
+                        else
+                        {
+                            int fallback = ResolveFallbackStackAmount(it);
+                            if (fallback > 0)
+                            {
+                                sizes.Add(fallback + "*");
+                                total += fallback;
+                            }
+                            else
+                            {
+                                sizes.Add("?");
+                            }
+                        }
                     }
                 }
-                int total = sizes.Where(s => s > 0).Sum();
                 string sizesStr = sizes.Count == 0 ? "-" : "[" + string.Join(",", sizes) + "]";
                 msg += "  [config] " + it.Code + " (" + it.Label + "): " +
                        sizes.Count + " stack(s) sizes=" + sizesStr + " total=" + total + "\n";
@@ -374,14 +403,21 @@ namespace BlackMarketSystem
             // Segurança anti-perda:
             // Só prossegue se conseguir ler o tamanho real dos stacks.
             // Se a leitura falhar, cancela a venda (não destrói nada).
+            int fallbackAmount = ResolveFallbackStackAmount(itemCfg);
+            bool usedFallback = false;
             var stackEntries = new List<(Item Item, int Size)>(matching.Count);
             foreach (var it in matching)
             {
                 int sz = ReadStackAmount(it);
+                if (sz <= 0 && fallbackAmount > 0)
+                {
+                    sz = fallbackAmount;
+                    usedFallback = true;
+                }
                 if (sz <= 0)
                 {
-                    player.Reply("[Mercado Negro] Nao foi possivel ler o tamanho do stack. Venda cancelada para evitar perda.", Color.Red);
-                    Console.WriteLine("[BlackMarket] Venda cancelada para " + player.Name + ": stack size desconhecido de " + itemCfg.Code);
+                    player.Reply("[Mercado Negro] Nao foi possivel ler o tamanho do stack. Defina fallback no item (FallbackStackAmount) ou no mapa FallbackStackSizes e rode /mn_reload.", Color.Red);
+                    Console.WriteLine("[BlackMarket] Venda cancelada para " + player.Name + ": stack size desconhecido de " + itemCfg.Code + " sem fallback.");
                     return;
                 }
                 stackEntries.Add((it, sz));
@@ -410,6 +446,11 @@ namespace BlackMarketSystem
             Console.WriteLine("[BlackMarket] Stack sizes detectados para " + itemCfg.Code +
                 ": [" + string.Join(",", stackSizes) + "] total=" + totalDisponivel +
                 " pedido=" + quer + " planejado=" + planejados);
+            if (usedFallback)
+            {
+                Console.WriteLine("[BlackMarket] Usando fallback de stack para " + itemCfg.Code +
+                    " = " + fallbackAmount + " unidade(s) por stack.");
+            }
 
             int removidos = 0;
             foreach (int idx in selectedIndices)
@@ -558,6 +599,33 @@ namespace BlackMarketSystem
 
             int best = bestBySum.Keys.Where(k => k > 0).DefaultIfEmpty(0).Max();
             return best == 0 ? new List<int>() : bestBySum[best];
+        }
+
+        private int ResolveFallbackStackAmount(BlackMarketItem itemCfg)
+        {
+            if (itemCfg == null) return 0;
+
+            if (itemCfg.FallbackStackAmount > 0)
+                return itemCfg.FallbackStackAmount;
+
+            if (!_cfg.UseFallbackStackSizes || _cfg.FallbackStackSizes == null)
+                return 0;
+
+            if (!string.IsNullOrEmpty(itemCfg.Code) &&
+                _cfg.FallbackStackSizes.TryGetValue(itemCfg.Code, out int byCode) &&
+                byCode > 0)
+            {
+                return byCode;
+            }
+
+            if (!string.IsNullOrEmpty(itemCfg.Label) &&
+                _cfg.FallbackStackSizes.TryGetValue(itemCfg.Label, out int byLabel) &&
+                byLabel > 0)
+            {
+                return byLabel;
+            }
+
+            return 0;
         }
 
         private BlackMarketItem ResolveItem(string input)

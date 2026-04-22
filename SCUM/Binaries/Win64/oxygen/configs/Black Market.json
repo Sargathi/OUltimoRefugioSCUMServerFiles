@@ -3,6 +3,11 @@
   "CooldownSeconds": 180,
   "AdminPermission": "blackmarket.admin",
   "LogFilePath": "C:\\scumserver\\blackmarket_sales.log",
+  "UseFallbackStackSizes": true,
+  "FallbackStackSizes": {
+    "Joint01": 10,
+    "Spliff": 10
+  },
   "Zones": [
     {
       "Id": "C2_MercadoNegro",
