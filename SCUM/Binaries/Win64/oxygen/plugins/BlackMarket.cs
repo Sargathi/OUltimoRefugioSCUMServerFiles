@@ -352,8 +352,9 @@ namespace BlackMarketSystem
                 return;
             }
 
+            bool pediuQuantidadeEspecifica = args.Length >= 2;
             int pedidos = int.MaxValue;
-            if (args.Length >= 2)
+            if (pediuQuantidadeEspecifica)
             {
                 int.TryParse(args[1], out pedidos);
                 if (pedidos <= 0) pedidos = int.MaxValue;
@@ -423,9 +424,9 @@ namespace BlackMarketSystem
                 stackEntries.Add((it, sz));
             }
 
-            if (usedFallback && pedidos != int.MaxValue)
+            if (usedFallback && pediuQuantidadeEspecifica)
             {
-                player.Reply("[Mercado Negro] Quantidade exata indisponivel (stack sem leitura). Use /vender <item> sem [qtd], ou aguarde versao da API com leitura de stack.", Color.Orange);
+                player.Reply("[Mercado Negro] Quantidade exata indisponivel (stack sem leitura). Use /vender <item> sem [qtd].", Color.Orange);
                 return;
             }
 
@@ -456,6 +457,7 @@ namespace BlackMarketSystem
             {
                 Console.WriteLine("[BlackMarket] Usando fallback de stack para " + itemCfg.Code +
                     " = " + fallbackAmount + " unidade(s) por stack.");
+                player.Reply("[Mercado Negro] Stack sem leitura detectado. Venda processada por stack inteiro.", Color.Yellow);
             }
 
             int removidos = 0;
