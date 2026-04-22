@@ -5,8 +5,8 @@
   "LogFilePath": "C:\\scumserver\\blackmarket_sales.log",
   "UseFallbackStackSizes": true,
   "FallbackStackSizes": {
-    "Joint01": 10,
-    "Spliff": 10
+    "Joint01": 5,
+    "Spliff": 5
   },
   "Zones": [
     {

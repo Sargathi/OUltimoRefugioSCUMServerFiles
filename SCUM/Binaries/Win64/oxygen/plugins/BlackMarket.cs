@@ -40,8 +40,8 @@ namespace BlackMarketSystem
         public bool UseFallbackStackSizes { get; set; } = true;
         public Dictionary<string, int> FallbackStackSizes { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Joint01"] = 10,
-            ["Spliff"] = 10
+            ["Joint01"] = 5,
+            ["Spliff"] = 5
         };
 
         public List<BlackMarketZone> Zones { get; set; } = new List<BlackMarketZone>
@@ -59,14 +59,14 @@ namespace BlackMarketSystem
 
         public List<BlackMarketItem> Items { get; set; } = new List<BlackMarketItem>
         {
-            new BlackMarketItem { Code = "Joint01", Label = "Baseado", PricePerUnit = 300, MaxPerSale = 30, FallbackStackAmount = 10 },
-            new BlackMarketItem { Code = "Spliff",  Label = "Spliff",  PricePerUnit = 150, MaxPerSale = 30, FallbackStackAmount = 10 }
+            new BlackMarketItem { Code = "Joint01", Label = "Baseado", PricePerUnit = 300, MaxPerSale = 30, FallbackStackAmount = 5 },
+            new BlackMarketItem { Code = "Spliff",  Label = "Spliff",  PricePerUnit = 150, MaxPerSale = 30, FallbackStackAmount = 5 }
         };
     }
 
     #endregion
 
-[Info("Black Market", "OUltimoRefugio", "2.7.1")]
+[Info("Black Market", "OUltimoRefugio", "2.7.2")]
     [Description("Mercado negro para itens bloqueados nos NPC Traders.")]
     public class BlackMarketPlugin : OxygenPlugin
     {
@@ -80,7 +80,7 @@ namespace BlackMarketSystem
             _cfg = LoadConfig<BlackMarketConfig>() ?? new BlackMarketConfig();
             SaveConfig(_cfg);
 
-            Console.WriteLine("[BlackMarket] v2.7.1 carregado. Zonas: " + _cfg.Zones.Count + ", Itens: " + _cfg.Items.Count);
+            Console.WriteLine("[BlackMarket] v2.7.2 carregado. Zonas: " + _cfg.Zones.Count + ", Itens: " + _cfg.Items.Count);
         }
 
         public override void OnUnload()
@@ -421,6 +421,12 @@ namespace BlackMarketSystem
                     return;
                 }
                 stackEntries.Add((it, sz));
+            }
+
+            if (usedFallback && pedidos != int.MaxValue)
+            {
+                player.Reply("[Mercado Negro] Quantidade exata indisponivel (stack sem leitura). Use /vender <item> sem [qtd], ou aguarde versao da API com leitura de stack.", Color.Orange);
+                return;
             }
 
             int totalDisponivel = stackEntries.Sum(s => s.Size);
