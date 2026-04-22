@@ -43,10 +43,10 @@ namespace BlackMarketSystem
             {
                 Id = "C2_MercadoNegro",
                 Label = "Mercado Negro C2",
-                X = -152176.171875,
-                Y = 287610.88899,
+                X = -149958.469,
+                Y = 293681.688, 
                 Z = 0.0,
-                RadiusMeters = 15.0
+                RadiusMeters = 5.0
             }
         };
 
