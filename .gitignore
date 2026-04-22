@@ -38,6 +38,8 @@ SCUM/Saved/Config/CrashReportClient/
 *.bak
 *.BACKUP
 *.iniBACKUP
+SCUM/Binaries/Win64/logs/
+SCUM/Binaries/Win64/oxygen/data/
 
 # --- Backups e Zips ---
 backup/
