@@ -1,4 +1,3 @@
-
 {
 	"economy-override":
 	{
@@ -43,6 +42,7 @@
 			],
 			"A_0_Trader":
 			[
+				{"tradeable-code" : "Cannabis_Seed_Bag", "base-purchase-price" : "-1", "base-sell-price" : "-1", "delta-price" : "-1.0", "can-be-purchased" : "false", "required-famepoints" : "-1", "available-after-sale-only" : "default"}
 			],
 			"B_4_Armory":
 			[
@@ -61,6 +61,7 @@
 			],
 			"B_4_Trader":
 			[
+				{"tradeable-code" : "Cannabis_Seed_Bag", "base-purchase-price" : "-1", "base-sell-price" : "-1", "delta-price" : "-1.0", "can-be-purchased" : "false", "required-famepoints" : "-1", "available-after-sale-only" : "default"}
 			],
 			"C_2_Armory":
 			[
@@ -79,6 +80,7 @@
 			],
 			"C_2_Trader":
 			[
+				{"tradeable-code" : "Cannabis_Seed_Bag", "base-purchase-price" : "200", "base-sell-price" : "-1", "delta-price" : "-1.0", "can-be-purchased" : "true", "required-famepoints" : "-1", "available-after-sale-only" : "default"}
 			],
 			"Z_3_Armory":
 			[
@@ -97,6 +99,7 @@
 			],
 			"Z_3_Trader":
 			[
+				{"tradeable-code" : "Cannabis_Seed_Bag", "base-purchase-price" : "-1", "base-sell-price" : "-1", "delta-price" : "-1.0", "can-be-purchased" : "false", "required-famepoints" : "-1", "available-after-sale-only" : "default"}
 			]
 		}	
 	}

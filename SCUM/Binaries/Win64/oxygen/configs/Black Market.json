@@ -1,0 +1,30 @@
+{
+  "Enabled": true,
+  "CooldownSeconds": 180,
+  "AdminPermission": "blackmarket.admin",
+  "LogFilePath": "C:\\scumserver\\blackmarket_sales.log",
+  "Zones": [
+    {
+      "Id": "C2_MercadoNegro",
+      "Label": "Mercado Negro C2",
+      "X": -152176.171875,
+      "Y": 287610.88899,
+      "Z": 0,
+      "RadiusMeters": 15
+    }
+  ],
+  "Items": [
+    {
+      "Code": "Joint01",
+      "Label": "Baseado",
+      "PricePerUnit": 300,
+      "MaxPerSale": 30
+    },
+    {
+      "Code": "Spliff",
+      "Label": "Spliff",
+      "PricePerUnit": 150,
+      "MaxPerSale": 30
+    }
+  ]
+}
