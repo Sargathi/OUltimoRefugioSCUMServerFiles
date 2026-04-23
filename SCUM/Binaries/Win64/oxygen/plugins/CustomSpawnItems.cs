@@ -51,7 +51,7 @@ namespace SpawnSystem
         public string FemaleUnderwearItemId { get; set; } = "Underpants_01";
         public string SocksItemId          { get; set; } = "Sock_01";
         public string VipOuroBackpackItemId { get; set; } = "Military_Backpack_03_07";
-        public int VipOuroBackpackEquipDelaySeconds { get; set; } = 35;
+        public int VipOuroBackpackEquipDelaySeconds { get; set; } = 45;
 
         public SpawnSettings WhitelistSet { get; set; } = new SpawnSettings
         {
