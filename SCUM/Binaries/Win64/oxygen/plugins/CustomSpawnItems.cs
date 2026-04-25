@@ -2,11 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Oxygen.Csharp.API;
 using Oxygen.Csharp.Core;
 
 // ============================================================
-//  Custom Respawn Items  v4.0.3
+//  Custom Respawn Items  v4.0.4
 //  O Último Refúgio — SCUM Server
 //
 //  Tiers de respawn (verificados via arquivo de texto, sem cache):
@@ -49,6 +50,9 @@ namespace SpawnSystem
         public string FemaleBraItemId      { get; set; } = "F_Undershirt_Bra_01";
         public string FemaleUnderwearItemId { get; set; } = "Underpants_01";
         public string SocksItemId          { get; set; } = "Sock_01";
+        public int RespawnSafetyDelayMs { get; set; } = 700;
+        public int EquipIntervalMs { get; set; } = 70;
+        public int GiveItemIntervalMs { get; set; } = 60;
 
         public SpawnSettings WhitelistSet { get; set; } = new SpawnSettings
         {
@@ -132,7 +136,7 @@ namespace SpawnSystem
 
     #endregion
 
-    [Info("Custom Respawn Items", "OUltimoRefugio", "4.0.3")]
+    [Info("Custom Respawn Items", "OUltimoRefugio", "4.0.4")]
     [Description("Tiers de respawn via arquivos de texto: vanilla (sem WL), basico (WL), prata, ouro.")]
     public class CustomRespawnPlugin : OxygenPlugin
     {
@@ -146,7 +150,7 @@ namespace SpawnSystem
 
             _kitCooldowns = LoadData<Dictionary<string, long>>("SpawnKitCooldowns")
                             ?? new Dictionary<string, long>();
-            Console.WriteLine($"[SpawnSystem] v4.0.3 carregado. Cooldown: {_cfg.KitCooldownMinutes} min.");
+            Console.WriteLine($"[SpawnSystem] v4.0.4 carregado. Cooldown: {_cfg.KitCooldownMinutes} min.");
         }
 
         public override void OnUnload()
@@ -155,7 +159,7 @@ namespace SpawnSystem
             Console.WriteLine("[SpawnSystem] Dados de cooldown salvos.");
         }
 
-        public override void OnPlayerRespawned(PlayerBase player)
+        public override async void OnPlayerRespawned(PlayerBase player)
         {
             if (player == null || string.IsNullOrEmpty(player.SteamId)) return;
             if (!_cfg.Enabled) return;
@@ -174,15 +178,35 @@ namespace SpawnSystem
             // ── SEM WHITELIST: vanilla puro, sem tocar no inventário ─────────
             if (tier == "vanilla")
             {
-                EquipBaselineUnderwearAndSocks(player);
+                await EquipBaselineUnderwearAndSocksAsync(player);
                 Console.WriteLine($"[SpawnSystem] {player.Name} sem WL — respawn vanilla.");
                 return;
             }
 
             // ── Para todos os outros tiers: limpa e equipa ───────────────────
-            player.Inventory.Clear();
-            player.ProcessCommand("EquipParachute");
-            EquipBaselineUnderwearAndSocks(player);
+            int safetyDelay = Math.Max(0, _cfg.RespawnSafetyDelayMs);
+            if (safetyDelay > 0)
+                await Task.Delay(safetyDelay);
+
+            try
+            {
+                player.Inventory.Clear();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SpawnSystem] Falha ao limpar inventario de {player.Name}: {ex.Message}");
+            }
+
+            try
+            {
+                player.ProcessCommand("EquipParachute");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SpawnSystem] Falha ao equipar paraquedas de {player.Name}: {ex.Message}");
+            }
+
+            await EquipBaselineUnderwearAndSocksAsync(player);
 
             SpawnSettings kit = tier == "ouro"  ? _cfg.VipOuroSet
                               : tier == "prata" ? _cfg.VipPrataSet
@@ -191,7 +215,18 @@ namespace SpawnSystem
             // Equipa roupas sempre (sem cooldown)
             foreach (var item in kit.Equipment)
             {
-                player.EquipItem(item);
+                if (string.IsNullOrWhiteSpace(item)) continue;
+                try
+                {
+                    player.EquipItem(item);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SpawnSystem] Falha ao equipar '{item}' para {player.Name}: {ex.Message}");
+                }
+                int equipInterval = Math.Max(0, _cfg.EquipIntervalMs);
+                if (equipInterval > 0)
+                    await Task.Delay(equipInterval);
             }
 
             // ── Cooldown para itens de inventário ────────────────────────────
@@ -215,7 +250,20 @@ namespace SpawnSystem
             else
             {
                 foreach (var item in kit.Inventory)
-                    player.GiveItem(item);
+                {
+                    if (string.IsNullOrWhiteSpace(item)) continue;
+                    try
+                    {
+                        player.GiveItem(item);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SpawnSystem] Falha ao entregar '{item}' para {player.Name}: {ex.Message}");
+                    }
+                    int giveInterval = Math.Max(0, _cfg.GiveItemIntervalMs);
+                    if (giveInterval > 0)
+                        await Task.Delay(giveInterval);
+                }
 
                 _kitCooldowns[steamId] = agora;
                 SaveData("SpawnKitCooldowns", _kitCooldowns);
@@ -243,26 +291,39 @@ namespace SpawnSystem
             }
         }
 
-        private void EquipBaselineUnderwearAndSocks(PlayerBase player)
+        private async Task EquipBaselineUnderwearAndSocksAsync(PlayerBase player)
         {
             try
             {
+                int equipInterval = Math.Max(0, _cfg.EquipIntervalMs);
                 bool isFemale = IsLikelyFemale(player);
                 if (isFemale)
                 {
                     if (!string.IsNullOrWhiteSpace(_cfg.FemaleBraItemId))
+                    {
                         player.EquipItem(_cfg.FemaleBraItemId);
+                        if (equipInterval > 0) await Task.Delay(equipInterval);
+                    }
                     if (!string.IsNullOrWhiteSpace(_cfg.FemaleUnderwearItemId))
+                    {
                         player.EquipItem(_cfg.FemaleUnderwearItemId);
+                        if (equipInterval > 0) await Task.Delay(equipInterval);
+                    }
                 }
                 else
                 {
                     if (!string.IsNullOrWhiteSpace(_cfg.MaleUnderwearItemId))
+                    {
                         player.EquipItem(_cfg.MaleUnderwearItemId);
+                        if (equipInterval > 0) await Task.Delay(equipInterval);
+                    }
                 }
 
                 if (!string.IsNullOrWhiteSpace(_cfg.SocksItemId))
+                {
                     player.EquipItem(_cfg.SocksItemId);
+                    if (equipInterval > 0) await Task.Delay(equipInterval);
+                }
             }
             catch (Exception ex)
             {

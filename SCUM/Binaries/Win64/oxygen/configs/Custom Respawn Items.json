@@ -10,6 +10,9 @@
   "FemaleBraItemId": "F_Undershirt_Bra_01",
   "FemaleUnderwearItemId": "Underpants_01",
   "SocksItemId": "Sock_01",
+  "RespawnSafetyDelayMs": 700,
+  "EquipIntervalMs": 70,
+  "GiveItemIntervalMs": 60,
   "WhitelistSet": {
     "Equipment": [
       "Bamboo_Hat_02",
