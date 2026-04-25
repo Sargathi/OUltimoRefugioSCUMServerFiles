@@ -10,7 +10,7 @@
   "FemaleBraItemId": "F_Undershirt_Bra_01",
   "FemaleUnderwearItemId": "Underpants_01",
   "SocksItemId": "Sock_01",
-  "VipOuroBackpackItemId": "Military_Backpack_03_07",
+  "VipOuroBackpackItemId": "",
   "VipOuroBackpackEquipDelaySeconds": 35,
   "WhitelistSet": {
     "Equipment": [

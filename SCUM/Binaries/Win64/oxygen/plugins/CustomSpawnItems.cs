@@ -7,7 +7,7 @@ using Oxygen.Csharp.API;
 using Oxygen.Csharp.Core;
 
 // ============================================================
-//  Custom Respawn Items  v4.0.1
+//  Custom Respawn Items  v4.0.2
 //  O Último Refúgio — SCUM Server
 //
 //  Tiers de respawn (verificados via arquivo de texto, sem cache):
@@ -50,7 +50,7 @@ namespace SpawnSystem
         public string FemaleBraItemId      { get; set; } = "F_Undershirt_Bra_01";
         public string FemaleUnderwearItemId { get; set; } = "Underpants_01";
         public string SocksItemId          { get; set; } = "Sock_01";
-        public string VipOuroBackpackItemId { get; set; } = "Military_Backpack_03_07";
+        public string VipOuroBackpackItemId { get; set; } = "";
         public int VipOuroBackpackEquipDelaySeconds { get; set; } = 50;
 
         public SpawnSettings WhitelistSet { get; set; } = new SpawnSettings
@@ -135,7 +135,7 @@ namespace SpawnSystem
 
     #endregion
 
-    [Info("Custom Respawn Items", "OUltimoRefugio", "4.0.1")]
+    [Info("Custom Respawn Items", "OUltimoRefugio", "4.0.2")]
     [Description("Tiers de respawn via arquivos de texto: vanilla (sem WL), basico (WL), prata, ouro.")]
     public class CustomRespawnPlugin : OxygenPlugin
     {
@@ -152,7 +152,7 @@ namespace SpawnSystem
                             ?? new Dictionary<string, long>();
             _vipOuroBackpackTokens = new Dictionary<string, long>();
 
-            Console.WriteLine($"[SpawnSystem] v4.0.1 carregado. Cooldown: {_cfg.KitCooldownMinutes} min.");
+            Console.WriteLine($"[SpawnSystem] v4.0.2 carregado. Cooldown: {_cfg.KitCooldownMinutes} min.");
         }
 
         public override void OnUnload()
