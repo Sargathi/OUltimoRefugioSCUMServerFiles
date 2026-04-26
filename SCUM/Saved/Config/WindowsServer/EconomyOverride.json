@@ -80,7 +80,7 @@
 			],
 			"C_2_Trader":
 			[
-				{"tradeable-code" : "Cannabis_Seed_Bag", "base-purchase-price" : "200", "base-sell-price" : "-1", "delta-price" : "-1.0", "can-be-purchased" : "true", "required-famepoints" : "-1", "available-after-sale-only" : "default"}
+				{"tradeable-code" : "Cannabis_Seed_Bag", "base-purchase-price" : "1000", "base-sell-price" : "-1", "delta-price" : "-1.0", "can-be-purchased" : "true", "required-famepoints" : "-1", "available-after-sale-only" : "default"}
 			],
 			"Z_3_Armory":
 			[
