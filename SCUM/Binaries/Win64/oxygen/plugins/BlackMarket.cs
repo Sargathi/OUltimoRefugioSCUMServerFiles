@@ -66,7 +66,7 @@ namespace BlackMarketSystem
 
     #endregion
 
-[Info("Black Market", "OUltimoRefugio", "2.7.2")]
+    [Info("Black Market", "OUltimoRefugio", "2.7.3")]
     [Description("Mercado negro para itens bloqueados nos NPC Traders.")]
     public class BlackMarketPlugin : OxygenPlugin
     {
@@ -80,7 +80,7 @@ namespace BlackMarketSystem
             _cfg = LoadConfig<BlackMarketConfig>() ?? new BlackMarketConfig();
             SaveConfig(_cfg);
 
-            Console.WriteLine("[BlackMarket] v2.7.2 carregado. Zonas: " + _cfg.Zones.Count + ", Itens: " + _cfg.Items.Count);
+            Console.WriteLine("[BlackMarket] v2.7.3 carregado. Zonas: " + _cfg.Zones.Count + ", Itens: " + _cfg.Items.Count);
         }
 
         public override void OnUnload()
@@ -90,6 +90,7 @@ namespace BlackMarketSystem
 
         public override void OnPlayerDisconnected(PlayerBase player)
         {
+            if (player == null || string.IsNullOrEmpty(player.SteamId)) return;
             _cooldowns.Remove(player.SteamId);
         }
 
@@ -491,7 +492,8 @@ namespace BlackMarketSystem
 
             await player.ProcessCommandAsync("ChangeCurrencyBalance Normal +" + valor);
 
-            _cooldowns[player.SteamId] = DateTime.UtcNow.AddSeconds(_cfg.CooldownSeconds);
+            if (!string.IsNullOrEmpty(player.SteamId))
+                _cooldowns[player.SteamId] = DateTime.UtcNow.AddSeconds(_cfg.CooldownSeconds);
 
             player.Reply("[Mercado Negro] Vendidos " + removidos + "x " + itemCfg.Label + " por $" + valor + ".", Color.Green);
 

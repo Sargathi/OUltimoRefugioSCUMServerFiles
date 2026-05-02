@@ -7,7 +7,7 @@ using Oxygen.Csharp.API;
 using Oxygen.Csharp.Core;
 
 // ============================================================
-//  Custom Respawn Items  v4.0.4
+//  Custom Respawn Items  v4.0.5
 //  O Último Refúgio — SCUM Server
 //
 //  Tiers de respawn (verificados via arquivo de texto, sem cache):
@@ -22,7 +22,7 @@ using Oxygen.Csharp.Core;
 //    Equipamento tático + arco, flechas, taco, MRE.
 //
 //  VIP OURO — lido de vip_ouro.txt
-//    Equipamento tático + rifle Hunter85, taco, MRE.
+//    Equipamento tático + aljava + arco recurvo, etc. (sem itens cujo id contenha "backpack".)
 //
 //  Prioridade: Ouro > Prata > Whitelist > Vanilla
 // ============================================================
@@ -136,7 +136,7 @@ namespace SpawnSystem
 
     #endregion
 
-    [Info("Custom Respawn Items", "OUltimoRefugio", "4.0.4")]
+    [Info("Custom Respawn Items", "OUltimoRefugio", "4.0.5")]
     [Description("Tiers de respawn via arquivos de texto: vanilla (sem WL), basico (WL), prata, ouro.")]
     public class CustomRespawnPlugin : OxygenPlugin
     {
@@ -146,11 +146,12 @@ namespace SpawnSystem
         public override void OnLoad()
         {
             _cfg = LoadConfig<RespawnConfig>() ?? new RespawnConfig();
+            SanitizeVipOuroNoBackpackItems(_cfg);
             SaveConfig(_cfg);
 
             _kitCooldowns = LoadData<Dictionary<string, long>>("SpawnKitCooldowns")
                             ?? new Dictionary<string, long>();
-            Console.WriteLine($"[SpawnSystem] v4.0.4 carregado. Cooldown: {_cfg.KitCooldownMinutes} min.");
+            Console.WriteLine($"[SpawnSystem] v4.0.5 carregado. Cooldown: {_cfg.KitCooldownMinutes} min.");
         }
 
         public override void OnUnload()
@@ -159,121 +160,149 @@ namespace SpawnSystem
             Console.WriteLine("[SpawnSystem] Dados de cooldown salvos.");
         }
 
-        public override async void OnPlayerRespawned(PlayerBase player)
+        public override void OnPlayerRespawned(PlayerBase player)
         {
-            if (player == null || string.IsNullOrEmpty(player.SteamId)) return;
-            if (!_cfg.Enabled) return;
+            // Evita async void no hook (exceções não observadas podem derrubar o Oxygen).
+            _ = HandlePlayerRespawnedAsync(player);
+        }
 
-            string steamId = player.SteamId;
-            Console.WriteLine($"[SpawnSystem] Respawn: {player.Name} ({steamId})");
-
-            // ── Determina o tier via arquivos de texto (sem cache do OxyMod) ─
-            bool isVipOuro  = IsInFile(_cfg.VipOuroFilePath,  steamId);
-            bool isVipPrata = !isVipOuro && IsInFile(_cfg.VipPrataFilePath, steamId);
-            bool hasWl      = !isVipOuro && !isVipPrata && IsInFile(_cfg.WhitelistFilePath, steamId);
-
-            string tier = isVipOuro ? "ouro" : isVipPrata ? "prata" : hasWl ? "whitelist" : "vanilla";
-            Console.WriteLine($"[SpawnSystem] {player.Name} -> tier: {tier}");
-
-            // ── SEM WHITELIST: vanilla puro, sem tocar no inventário ─────────
-            if (tier == "vanilla")
-            {
-                await EquipBaselineUnderwearAndSocksAsync(player);
-                Console.WriteLine($"[SpawnSystem] {player.Name} sem WL — respawn vanilla.");
-                return;
-            }
-
-            // ── Para todos os outros tiers: limpa e equipa ───────────────────
-            int safetyDelay = Math.Max(0, _cfg.RespawnSafetyDelayMs);
-            if (safetyDelay > 0)
-                await Task.Delay(safetyDelay);
-
+        private async Task HandlePlayerRespawnedAsync(PlayerBase player)
+        {
             try
             {
-                player.Inventory.Clear();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[SpawnSystem] Falha ao limpar inventario de {player.Name}: {ex.Message}");
-            }
+                if (player == null || string.IsNullOrEmpty(player.SteamId)) return;
+                if (!_cfg.Enabled) return;
 
-            try
-            {
-                player.ProcessCommand("EquipParachute");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[SpawnSystem] Falha ao equipar paraquedas de {player.Name}: {ex.Message}");
-            }
+                string steamId = player.SteamId;
+                Console.WriteLine($"[SpawnSystem] Respawn: {player.Name} ({steamId})");
 
-            await EquipBaselineUnderwearAndSocksAsync(player);
+                // ── Determina o tier via arquivos de texto (sem cache do OxyMod) ─
+                bool isVipOuro  = IsInFile(_cfg.VipOuroFilePath,  steamId);
+                bool isVipPrata = !isVipOuro && IsInFile(_cfg.VipPrataFilePath, steamId);
+                bool hasWl      = !isVipOuro && !isVipPrata && IsInFile(_cfg.WhitelistFilePath, steamId);
 
-            SpawnSettings kit = tier == "ouro"  ? _cfg.VipOuroSet
-                              : tier == "prata" ? _cfg.VipPrataSet
-                              :                   _cfg.WhitelistSet;
+                string tier = isVipOuro ? "ouro" : isVipPrata ? "prata" : hasWl ? "whitelist" : "vanilla";
+                Console.WriteLine($"[SpawnSystem] {player.Name} -> tier: {tier}");
 
-            // Equipa roupas sempre (sem cooldown)
-            foreach (var item in kit.Equipment)
-            {
-                if (string.IsNullOrWhiteSpace(item)) continue;
+                // ── SEM WHITELIST: vanilla puro, sem tocar no inventário ─────────
+                if (tier == "vanilla")
+                {
+                    await EquipBaselineUnderwearAndSocksAsync(player);
+                    Console.WriteLine($"[SpawnSystem] {player.Name} sem WL — respawn vanilla.");
+                    return;
+                }
+
+                // ── Para todos os outros tiers: limpa e equipa ───────────────────
+                int safetyDelay = Math.Max(0, _cfg.RespawnSafetyDelayMs);
+                if (safetyDelay > 0)
+                    await Task.Delay(safetyDelay);
+
                 try
                 {
-                    player.EquipItem(item);
+                    player.Inventory.Clear();
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[SpawnSystem] Falha ao equipar '{item}' para {player.Name}: {ex.Message}");
+                    Console.WriteLine($"[SpawnSystem] Falha ao limpar inventario de {player.Name}: {ex.Message}");
                 }
-                int equipInterval = Math.Max(0, _cfg.EquipIntervalMs);
-                if (equipInterval > 0)
-                    await Task.Delay(equipInterval);
-            }
 
-            // ── Cooldown para itens de inventário ────────────────────────────
-            long agora            = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            long cooldownSegundos = _cfg.KitCooldownMinutes * 60L;
-            bool cooldownAtivo    = false;
-            long segundosRestantes = 0;
+                try
+                {
+                    player.ProcessCommand("EquipParachute");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SpawnSystem] Falha ao equipar paraquedas de {player.Name}: {ex.Message}");
+                }
 
-            if (_kitCooldowns.TryGetValue(steamId, out long ultimaEntrega))
-            {
-                segundosRestantes = (ultimaEntrega + cooldownSegundos) - agora;
-                cooldownAtivo = segundosRestantes > 0;
-            }
+                await EquipBaselineUnderwearAndSocksAsync(player);
 
-            if (cooldownAtivo)
-            {
-                int minutosRestantes = (int)Math.Ceiling(segundosRestantes / 60.0);
-                player.Reply($"[Kit] Seus itens estarao disponiveis em {minutosRestantes} minuto(s).", Color.Yellow);
-                Console.WriteLine($"[SpawnSystem] {player.Name} bloqueado por cooldown. {minutosRestantes} min restantes.");
-            }
-            else
-            {
-                foreach (var item in kit.Inventory)
+                SpawnSettings kit = tier == "ouro"  ? _cfg.VipOuroSet
+                                  : tier == "prata" ? _cfg.VipPrataSet
+                                  :                   _cfg.WhitelistSet;
+
+                // Equipa roupas sempre (sem cooldown)
+                foreach (var item in kit.Equipment)
                 {
                     if (string.IsNullOrWhiteSpace(item)) continue;
+                    if (tier == "ouro" && IsBackpackItemId(item)) continue;
                     try
                     {
-                        player.GiveItem(item);
+                        player.EquipItem(item);
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[SpawnSystem] Falha ao entregar '{item}' para {player.Name}: {ex.Message}");
+                        Console.WriteLine($"[SpawnSystem] Falha ao equipar '{item}' para {player.Name}: {ex.Message}");
                     }
-                    int giveInterval = Math.Max(0, _cfg.GiveItemIntervalMs);
-                    if (giveInterval > 0)
-                        await Task.Delay(giveInterval);
+                    int equipInterval = Math.Max(0, _cfg.EquipIntervalMs);
+                    if (equipInterval > 0)
+                        await Task.Delay(equipInterval);
                 }
 
-                _kitCooldowns[steamId] = agora;
-                SaveData("SpawnKitCooldowns", _kitCooldowns);
+                // ── Cooldown para itens de inventário ────────────────────────────
+                long agora            = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                long cooldownSegundos = _cfg.KitCooldownMinutes * 60L;
+                bool cooldownAtivo    = false;
+                long segundosRestantes = 0;
 
-                string msg = (tier == "whitelist") ? _cfg.WlKitMessage : _cfg.Message;
-                if (!string.IsNullOrEmpty(msg))
-                    player.Reply(msg, Color.Green);
+                if (_kitCooldowns.TryGetValue(steamId, out long ultimaEntrega))
+                {
+                    segundosRestantes = (ultimaEntrega + cooldownSegundos) - agora;
+                    cooldownAtivo = segundosRestantes > 0;
+                }
 
-                Console.WriteLine($"[SpawnSystem] Kit '{tier}' entregue para {player.Name}.");
+                if (cooldownAtivo)
+                {
+                    int minutosRestantes = (int)Math.Ceiling(segundosRestantes / 60.0);
+                    player.Reply($"[Kit] Seus itens estarao disponiveis em {minutosRestantes} minuto(s).", Color.Yellow);
+                    Console.WriteLine($"[SpawnSystem] {player.Name} bloqueado por cooldown. {minutosRestantes} min restantes.");
+                }
+                else
+                {
+                    foreach (var item in kit.Inventory)
+                    {
+                        if (string.IsNullOrWhiteSpace(item)) continue;
+                        if (tier == "ouro" && IsBackpackItemId(item)) continue;
+                        try
+                        {
+                            player.GiveItem(item);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[SpawnSystem] Falha ao entregar '{item}' para {player.Name}: {ex.Message}");
+                        }
+                        int giveInterval = Math.Max(0, _cfg.GiveItemIntervalMs);
+                        if (giveInterval > 0)
+                            await Task.Delay(giveInterval);
+                    }
+
+                    _kitCooldowns[steamId] = agora;
+                    SaveData("SpawnKitCooldowns", _kitCooldowns);
+
+                    string msg = (tier == "whitelist") ? _cfg.WlKitMessage : _cfg.Message;
+                    if (!string.IsNullOrEmpty(msg))
+                        player.Reply(msg, Color.Green);
+
+                    Console.WriteLine($"[SpawnSystem] Kit '{tier}' entregue para {player.Name}.");
+                }
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SpawnSystem] Erro nao tratado no respawn: {ex}");
+            }
+        }
+
+        private static bool IsBackpackItemId(string itemId)
+        {
+            if (string.IsNullOrWhiteSpace(itemId)) return false;
+            return itemId.IndexOf("backpack", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static void SanitizeVipOuroNoBackpackItems(RespawnConfig cfg)
+        {
+            if (cfg?.VipOuroSet == null) return;
+            cfg.VipOuroSet.Equipment?.RemoveAll(IsBackpackItemId);
+            cfg.VipOuroSet.Inventory?.RemoveAll(IsBackpackItemId);
         }
 
         private bool IsInFile(string filePath, string steamId)

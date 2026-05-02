@@ -58,7 +58,7 @@ namespace SpawnSystem
             }
         };
 
-        // Kit Ouro: tudo do Prata + Hunter 85 e munição Cal .22
+        // Kit Ouro: tudo do Prata + Hunter 85 e munição Cal .22 (sem itens cujo id contenha "backpack")
         public SpawnSettings VipOuroSet { get; set; } = new SpawnSettings
         {
             Equipment = new List<string>
@@ -90,7 +90,7 @@ namespace SpawnSystem
 
     #endregion
 
-    [Info("Custom Respawn Items", "OUltimoRefugio", "1.3.0")]
+    [Info("Custom Respawn Items", "OUltimoRefugio", "1.3.1")]
     [Description("Gives specific item sets to standard and VIP players upon respawn.")]
     public class CustomRespawnPlugin : OxygenPlugin
     {
@@ -101,68 +101,98 @@ namespace SpawnSystem
         public override void OnLoad()
         {
             _cfg = LoadConfig<RespawnConfig>() ?? new RespawnConfig();
+            SanitizeVipOuroNoBackpackItems(_cfg);
             SaveConfig(_cfg);
-            Console.WriteLine("[SpawnSystem] Plugin v1.3.0 carregado. Kits: Padrão, Prata e Ouro.");
+            Console.WriteLine("[SpawnSystem] Plugin v1.3.1 carregado. Kits: Padrão, Prata e Ouro.");
         }
 
         #endregion
 
         #region Hook: OnPlayerRespawned
 
-        public override async void OnPlayerRespawned(PlayerBase player)
+        public override void OnPlayerRespawned(PlayerBase player)
         {
-            if (!_cfg.Enabled) return;
+            _ = HandlePlayerRespawnedAsync(player);
+        }
 
-            // Aguarda 1 segundo para garantir que o personagem esteja
-            // completamente inicializado no mundo antes de manipular o inventário.
-            await Task.Delay(1000);
-
-            // Determina qual kit usar com base na permissão do jogador
-            SpawnSettings selectedSet;
-            bool isVip = false;
-
-            if (player.HasPermission(_cfg.VipOuroPermission))
+        private async Task HandlePlayerRespawnedAsync(PlayerBase player)
+        {
+            try
             {
-                selectedSet = _cfg.VipOuroSet;
-                isVip = true;
+                if (player == null || !_cfg.Enabled) return;
+
+                // Aguarda 1 segundo para garantir que o personagem esteja
+                // completamente inicializado no mundo antes de manipular o inventário.
+                await Task.Delay(1000);
+
+                // Determina qual kit usar com base na permissão do jogador
+                SpawnSettings selectedSet;
+                bool isVip = false;
+                bool isVipOuro = false;
+
+                if (player.HasPermission(_cfg.VipOuroPermission))
+                {
+                    selectedSet = _cfg.VipOuroSet;
+                    isVip = true;
+                    isVipOuro = true;
+                }
+                else if (player.HasPermission(_cfg.VipPrataPermission))
+                {
+                    selectedSet = _cfg.VipPrataSet;
+                    isVip = true;
+                }
+                else
+                {
+                    selectedSet = _cfg.StandardSet;
+                }
+
+                // Limpa o inventário padrão do SCUM (roupas de presidiário)
+                // SOMENTE após o delay, quando os slots já estão inicializados
+                player.Inventory.Clear();
+
+                // Pequena pausa após o Clear para o servidor processar a limpeza
+                await Task.Delay(300);
+
+                // 1. Equipa roupas e bolsas primeiro (cria espaço no inventário)
+                foreach (var item in selectedSet.Equipment)
+                {
+                    if (isVipOuro && IsBackpackItemId(item)) continue;
+                    player.EquipItem(item);
+                }
+
+                // Pausa para garantir que os slots de roupa estejam prontos
+                await Task.Delay(300);
+
+                // 2. Entrega ferramentas e armas no inventário
+                foreach (var item in selectedSet.Inventory)
+                {
+                    if (isVipOuro && IsBackpackItemId(item)) continue;
+                    player.GiveItem(item);
+                }
+
+                // Notifica o jogador VIP
+                if (isVip && !string.IsNullOrEmpty(_cfg.Message))
+                {
+                    player.Reply(_cfg.Message, Color.Green);
+                }
             }
-            else if (player.HasPermission(_cfg.VipPrataPermission))
+            catch (Exception ex)
             {
-                selectedSet = _cfg.VipPrataSet;
-                isVip = true;
+                Console.WriteLine($"[SpawnSystem] Erro nao tratado no respawn: {ex}");
             }
-            else
-            {
-                selectedSet = _cfg.StandardSet;
-            }
+        }
 
-            // Limpa o inventário padrão do SCUM (roupas de presidiário)
-            // SOMENTE após o delay, quando os slots já estão inicializados
-            player.Inventory.Clear();
+        private static bool IsBackpackItemId(string itemId)
+        {
+            if (string.IsNullOrWhiteSpace(itemId)) return false;
+            return itemId.IndexOf("backpack", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
 
-            // Pequena pausa após o Clear para o servidor processar a limpeza
-            await Task.Delay(300);
-
-            // 1. Equipa roupas e bolsas primeiro (cria espaço no inventário)
-            foreach (var item in selectedSet.Equipment)
-            {
-                player.EquipItem(item);
-            }
-
-            // Pausa para garantir que os slots de roupa estejam prontos
-            await Task.Delay(300);
-
-            // 2. Entrega ferramentas e armas no inventário
-            foreach (var item in selectedSet.Inventory)
-            {
-                player.GiveItem(item);
-            }
-
-            // Notifica o jogador VIP
-            if (isVip && !string.IsNullOrEmpty(_cfg.Message))
-            {
-                player.Reply(_cfg.Message, Color.Green);
-            }
+        private static void SanitizeVipOuroNoBackpackItems(RespawnConfig cfg)
+        {
+            if (cfg?.VipOuroSet == null) return;
+            cfg.VipOuroSet.Equipment?.RemoveAll(IsBackpackItemId);
+            cfg.VipOuroSet.Inventory?.RemoveAll(IsBackpackItemId);
         }
 
         #endregion
