@@ -7,7 +7,7 @@ using Oxygen.Csharp.API;
 using Oxygen.Csharp.Core;
 
 // ============================================================
-//  Custom Respawn Items  v4.0.5
+//  Custom Respawn Items  v4.0.6
 //  O Último Refúgio — SCUM Server
 //
 //  Tiers de respawn (verificados via arquivo de texto, sem cache):
@@ -83,7 +83,7 @@ namespace SpawnSystem
         {
             Equipment = new List<string>
             {
-                "Military_Boonie_Hat_07",
+                "Boonie_Hat_07",
                 "Camouflage_Jacket_01",
                 "Hiking_Boots_03",
                 "Open_Finger_Gloves_01",
@@ -110,7 +110,7 @@ namespace SpawnSystem
         {
             Equipment = new List<string>
             {
-                "Military_Boonie_Hat_07",
+                "Boonie_Hat_07",
                 "Camouflage_Jacket_01",
                 "Hiking_Boots_03",
                 "Open_Finger_Gloves_01",
@@ -136,7 +136,7 @@ namespace SpawnSystem
 
     #endregion
 
-    [Info("Custom Respawn Items", "OUltimoRefugio", "4.0.5")]
+    [Info("Custom Respawn Items", "OUltimoRefugio", "4.0.6")]
     [Description("Tiers de respawn via arquivos de texto: vanilla (sem WL), basico (WL), prata, ouro.")]
     public class CustomRespawnPlugin : OxygenPlugin
     {
@@ -146,12 +146,13 @@ namespace SpawnSystem
         public override void OnLoad()
         {
             _cfg = LoadConfig<RespawnConfig>() ?? new RespawnConfig();
+            MigrateLegacyItemIdsInConfig(_cfg);
             SanitizeVipOuroNoBackpackItems(_cfg);
             SaveConfig(_cfg);
 
             _kitCooldowns = LoadData<Dictionary<string, long>>("SpawnKitCooldowns")
                             ?? new Dictionary<string, long>();
-            Console.WriteLine($"[SpawnSystem] v4.0.5 carregado. Cooldown: {_cfg.KitCooldownMinutes} min.");
+            Console.WriteLine($"[SpawnSystem] v4.0.6 carregado. Cooldown: {_cfg.KitCooldownMinutes} min.");
         }
 
         public override void OnUnload()
@@ -225,10 +226,11 @@ namespace SpawnSystem
                 foreach (var item in kit.Equipment)
                 {
                     if (string.IsNullOrWhiteSpace(item)) continue;
-                    if (tier == "ouro" && IsBackpackItemId(item)) continue;
+                    string equipId = MapLegacyItemId(item);
+                    if (tier == "ouro" && IsBackpackItemId(equipId)) continue;
                     try
                     {
-                        player.EquipItem(item);
+                        player.EquipItem(equipId);
                     }
                     catch (Exception ex)
                     {
@@ -262,10 +264,11 @@ namespace SpawnSystem
                     foreach (var item in kit.Inventory)
                     {
                         if (string.IsNullOrWhiteSpace(item)) continue;
-                        if (tier == "ouro" && IsBackpackItemId(item)) continue;
+                        string giveId = MapLegacyItemId(item);
+                        if (tier == "ouro" && IsBackpackItemId(giveId)) continue;
                         try
                         {
-                            player.GiveItem(item);
+                            player.GiveItem(giveId);
                         }
                         catch (Exception ex)
                         {
@@ -296,6 +299,42 @@ namespace SpawnSystem
         {
             if (string.IsNullOrWhiteSpace(itemId)) return false;
             return itemId.IndexOf("backpack", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        // IDs antigos que deixaram de existir no jogo (Spawn_Actor NULL no servidor atual).
+        private static readonly (string OldId, string NewId)[] LegacyItemIdReplacements =
+        {
+            ("Military_Boonie_Hat_07", "Boonie_Hat_07"),
+        };
+
+        private static string MapLegacyItemId(string itemId)
+        {
+            if (string.IsNullOrWhiteSpace(itemId)) return itemId;
+            foreach (var (oldId, newId) in LegacyItemIdReplacements)
+            {
+                if (itemId.Equals(oldId, StringComparison.OrdinalIgnoreCase))
+                    return newId;
+            }
+            return itemId;
+        }
+
+        private static void MigrateLegacyItemIdsInConfig(RespawnConfig cfg)
+        {
+            if (cfg == null) return;
+            foreach (var set in new[] { cfg.WhitelistSet, cfg.VipPrataSet, cfg.VipOuroSet })
+            {
+                if (set == null) continue;
+                if (set.Equipment != null)
+                {
+                    for (int i = 0; i < set.Equipment.Count; i++)
+                        set.Equipment[i] = MapLegacyItemId(set.Equipment[i]);
+                }
+                if (set.Inventory != null)
+                {
+                    for (int i = 0; i < set.Inventory.Count; i++)
+                        set.Inventory[i] = MapLegacyItemId(set.Inventory[i]);
+                }
+            }
         }
 
         private static void SanitizeVipOuroNoBackpackItems(RespawnConfig cfg)

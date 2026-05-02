@@ -36,7 +36,7 @@ namespace SpawnSystem
         {
             Equipment = new List<string>
             {
-                "Military_Boonie_Hat_07",
+                "Boonie_Hat_07",
                 "Camouflage_Jacket_01",
                 "Hiking_Boots_03",
                 "Open_Finger_Gloves_01",
@@ -63,7 +63,7 @@ namespace SpawnSystem
         {
             Equipment = new List<string>
             {
-                "Military_Boonie_Hat_07",
+                "Boonie_Hat_07",
                 "Camouflage_Jacket_01",
                 "Hiking_Boots_03",
                 "Open_Finger_Gloves_01",
@@ -90,7 +90,7 @@ namespace SpawnSystem
 
     #endregion
 
-    [Info("Custom Respawn Items", "OUltimoRefugio", "1.3.1")]
+    [Info("Custom Respawn Items", "OUltimoRefugio", "1.3.2")]
     [Description("Gives specific item sets to standard and VIP players upon respawn.")]
     public class CustomRespawnPlugin : OxygenPlugin
     {
@@ -101,9 +101,10 @@ namespace SpawnSystem
         public override void OnLoad()
         {
             _cfg = LoadConfig<RespawnConfig>() ?? new RespawnConfig();
+            MigrateLegacyItemIdsInConfig(_cfg);
             SanitizeVipOuroNoBackpackItems(_cfg);
             SaveConfig(_cfg);
-            Console.WriteLine("[SpawnSystem] Plugin v1.3.1 carregado. Kits: Padrão, Prata e Ouro.");
+            Console.WriteLine("[SpawnSystem] Plugin v1.3.2 carregado. Kits: Padrão, Prata e Ouro.");
         }
 
         #endregion
@@ -156,8 +157,9 @@ namespace SpawnSystem
                 // 1. Equipa roupas e bolsas primeiro (cria espaço no inventário)
                 foreach (var item in selectedSet.Equipment)
                 {
-                    if (isVipOuro && IsBackpackItemId(item)) continue;
-                    player.EquipItem(item);
+                    string equipId = MapLegacyItemId(item);
+                    if (isVipOuro && IsBackpackItemId(equipId)) continue;
+                    player.EquipItem(equipId);
                 }
 
                 // Pausa para garantir que os slots de roupa estejam prontos
@@ -166,8 +168,9 @@ namespace SpawnSystem
                 // 2. Entrega ferramentas e armas no inventário
                 foreach (var item in selectedSet.Inventory)
                 {
-                    if (isVipOuro && IsBackpackItemId(item)) continue;
-                    player.GiveItem(item);
+                    string giveId = MapLegacyItemId(item);
+                    if (isVipOuro && IsBackpackItemId(giveId)) continue;
+                    player.GiveItem(giveId);
                 }
 
                 // Notifica o jogador VIP
@@ -186,6 +189,41 @@ namespace SpawnSystem
         {
             if (string.IsNullOrWhiteSpace(itemId)) return false;
             return itemId.IndexOf("backpack", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static readonly (string OldId, string NewId)[] LegacyItemIdReplacements =
+        {
+            ("Military_Boonie_Hat_07", "Boonie_Hat_07"),
+        };
+
+        private static string MapLegacyItemId(string itemId)
+        {
+            if (string.IsNullOrWhiteSpace(itemId)) return itemId;
+            foreach (var (oldId, newId) in LegacyItemIdReplacements)
+            {
+                if (itemId.Equals(oldId, StringComparison.OrdinalIgnoreCase))
+                    return newId;
+            }
+            return itemId;
+        }
+
+        private static void MigrateLegacyItemIdsInConfig(RespawnConfig cfg)
+        {
+            if (cfg == null) return;
+            foreach (var set in new[] { cfg.StandardSet, cfg.VipPrataSet, cfg.VipOuroSet })
+            {
+                if (set == null) continue;
+                if (set.Equipment != null)
+                {
+                    for (int i = 0; i < set.Equipment.Count; i++)
+                        set.Equipment[i] = MapLegacyItemId(set.Equipment[i]);
+                }
+                if (set.Inventory != null)
+                {
+                    for (int i = 0; i < set.Inventory.Count; i++)
+                        set.Inventory[i] = MapLegacyItemId(set.Inventory[i]);
+                }
+            }
         }
 
         private static void SanitizeVipOuroNoBackpackItems(RespawnConfig cfg)
