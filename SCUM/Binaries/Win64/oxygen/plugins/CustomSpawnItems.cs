@@ -7,7 +7,7 @@ using Oxygen.Csharp.API;
 using Oxygen.Csharp.Core;
 
 // ============================================================
-//  Custom Respawn Items  v4.0.6
+//  Custom Respawn Items  v4.0.7
 //  O Último Refúgio — SCUM Server
 //
 //  Tiers de respawn (verificados via arquivo de texto, sem cache):
@@ -50,9 +50,19 @@ namespace SpawnSystem
         public string FemaleBraItemId      { get; set; } = "F_Undershirt_Bra_01";
         public string FemaleUnderwearItemId { get; set; } = "Underpants_01";
         public string SocksItemId          { get; set; } = "Sock_01";
-        public int RespawnSafetyDelayMs { get; set; } = 700;
+        public int RespawnSafetyDelayMs { get; set; } = 1200;
         public int EquipIntervalMs { get; set; } = 70;
         public int GiveItemIntervalMs { get; set; } = 60;
+        /// <summary>Pausa após limpar o inventário, antes do paraquedas (o ator do jogador pode ainda não estar pronto para spawn de itens).</summary>
+        public int PostInventoryClearDelayMs { get; set; } = 1000;
+        /// <summary>Pausa após EquipParachute antes da roupa base.</summary>
+        public int PostParachuteEquipDelayMs { get; set; } = 450;
+        /// <summary>Pausa extra após roupa íntima/meias, antes do kit VIP/WL.</summary>
+        public int PreKitEquipmentDelayMs { get; set; } = 800;
+        /// <summary>Tentativas por peça em EquipItem/GiveItem (Spawn_Actor NULL costuma ser timing, não id).</summary>
+        public int ItemSpawnAttemptCount { get; set; } = 3;
+        /// <summary>Espera entre tentativas de equipar/entregar o mesmo id.</summary>
+        public int ItemSpawnAttemptDelayMs { get; set; } = 400;
 
         public SpawnSettings WhitelistSet { get; set; } = new SpawnSettings
         {
@@ -83,7 +93,7 @@ namespace SpawnSystem
         {
             Equipment = new List<string>
             {
-                "Boonie_Hat_07",
+                "Military_Boonie_Hat_07",
                 "Camouflage_Jacket_01",
                 "Hiking_Boots_03",
                 "Open_Finger_Gloves_01",
@@ -110,7 +120,7 @@ namespace SpawnSystem
         {
             Equipment = new List<string>
             {
-                "Boonie_Hat_07",
+                "Military_Boonie_Hat_07",
                 "Camouflage_Jacket_01",
                 "Hiking_Boots_03",
                 "Open_Finger_Gloves_01",
@@ -136,7 +146,7 @@ namespace SpawnSystem
 
     #endregion
 
-    [Info("Custom Respawn Items", "OUltimoRefugio", "4.0.6")]
+    [Info("Custom Respawn Items", "OUltimoRefugio", "4.0.7")]
     [Description("Tiers de respawn via arquivos de texto: vanilla (sem WL), basico (WL), prata, ouro.")]
     public class CustomRespawnPlugin : OxygenPlugin
     {
@@ -146,13 +156,12 @@ namespace SpawnSystem
         public override void OnLoad()
         {
             _cfg = LoadConfig<RespawnConfig>() ?? new RespawnConfig();
-            MigrateLegacyItemIdsInConfig(_cfg);
             SanitizeVipOuroNoBackpackItems(_cfg);
             SaveConfig(_cfg);
 
             _kitCooldowns = LoadData<Dictionary<string, long>>("SpawnKitCooldowns")
                             ?? new Dictionary<string, long>();
-            Console.WriteLine($"[SpawnSystem] v4.0.6 carregado. Cooldown: {_cfg.KitCooldownMinutes} min.");
+            Console.WriteLine($"[SpawnSystem] v4.0.7 carregado. Cooldown: {_cfg.KitCooldownMinutes} min.");
         }
 
         public override void OnUnload()
@@ -207,6 +216,10 @@ namespace SpawnSystem
                     Console.WriteLine($"[SpawnSystem] Falha ao limpar inventario de {player.Name}: {ex.Message}");
                 }
 
+                int postClearDelay = Math.Max(0, _cfg.PostInventoryClearDelayMs);
+                if (postClearDelay > 0)
+                    await Task.Delay(postClearDelay);
+
                 try
                 {
                     player.ProcessCommand("EquipParachute");
@@ -216,7 +229,15 @@ namespace SpawnSystem
                     Console.WriteLine($"[SpawnSystem] Falha ao equipar paraquedas de {player.Name}: {ex.Message}");
                 }
 
+                int postChuteDelay = Math.Max(0, _cfg.PostParachuteEquipDelayMs);
+                if (postChuteDelay > 0)
+                    await Task.Delay(postChuteDelay);
+
                 await EquipBaselineUnderwearAndSocksAsync(player);
+
+                int preKitDelay = Math.Max(0, _cfg.PreKitEquipmentDelayMs);
+                if (preKitDelay > 0)
+                    await Task.Delay(preKitDelay);
 
                 SpawnSettings kit = tier == "ouro"  ? _cfg.VipOuroSet
                                   : tier == "prata" ? _cfg.VipPrataSet
@@ -226,16 +247,8 @@ namespace SpawnSystem
                 foreach (var item in kit.Equipment)
                 {
                     if (string.IsNullOrWhiteSpace(item)) continue;
-                    string equipId = MapLegacyItemId(item);
-                    if (tier == "ouro" && IsBackpackItemId(equipId)) continue;
-                    try
-                    {
-                        player.EquipItem(equipId);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[SpawnSystem] Falha ao equipar '{item}' para {player.Name}: {ex.Message}");
-                    }
+                    if (tier == "ouro" && IsBackpackItemId(item)) continue;
+                    await TryEquipItemWithRetriesAsync(player, item);
                     int equipInterval = Math.Max(0, _cfg.EquipIntervalMs);
                     if (equipInterval > 0)
                         await Task.Delay(equipInterval);
@@ -264,16 +277,8 @@ namespace SpawnSystem
                     foreach (var item in kit.Inventory)
                     {
                         if (string.IsNullOrWhiteSpace(item)) continue;
-                        string giveId = MapLegacyItemId(item);
-                        if (tier == "ouro" && IsBackpackItemId(giveId)) continue;
-                        try
-                        {
-                            player.GiveItem(giveId);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"[SpawnSystem] Falha ao entregar '{item}' para {player.Name}: {ex.Message}");
-                        }
+                        if (tier == "ouro" && IsBackpackItemId(item)) continue;
+                        await TryGiveItemWithRetriesAsync(player, item);
                         int giveInterval = Math.Max(0, _cfg.GiveItemIntervalMs);
                         if (giveInterval > 0)
                             await Task.Delay(giveInterval);
@@ -301,39 +306,45 @@ namespace SpawnSystem
             return itemId.IndexOf("backpack", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        // IDs antigos que deixaram de existir no jogo (Spawn_Actor NULL no servidor atual).
-        private static readonly (string OldId, string NewId)[] LegacyItemIdReplacements =
+        private async Task TryEquipItemWithRetriesAsync(PlayerBase player, string itemId)
         {
-            ("Military_Boonie_Hat_07", "Boonie_Hat_07"),
-        };
-
-        private static string MapLegacyItemId(string itemId)
-        {
-            if (string.IsNullOrWhiteSpace(itemId)) return itemId;
-            foreach (var (oldId, newId) in LegacyItemIdReplacements)
+            int attempts = Math.Max(1, _cfg.ItemSpawnAttemptCount);
+            int between = Math.Max(0, _cfg.ItemSpawnAttemptDelayMs);
+            for (int i = 0; i < attempts; i++)
             {
-                if (itemId.Equals(oldId, StringComparison.OrdinalIgnoreCase))
-                    return newId;
+                try
+                {
+                    player.EquipItem(itemId);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    if (i == attempts - 1)
+                        Console.WriteLine($"[SpawnSystem] Falha ao equipar '{itemId}' para {player.Name} apos {attempts} tentativa(s): {ex.Message}");
+                }
+                if (i < attempts - 1 && between > 0)
+                    await Task.Delay(between);
             }
-            return itemId;
         }
 
-        private static void MigrateLegacyItemIdsInConfig(RespawnConfig cfg)
+        private async Task TryGiveItemWithRetriesAsync(PlayerBase player, string itemId)
         {
-            if (cfg == null) return;
-            foreach (var set in new[] { cfg.WhitelistSet, cfg.VipPrataSet, cfg.VipOuroSet })
+            int attempts = Math.Max(1, _cfg.ItemSpawnAttemptCount);
+            int between = Math.Max(0, _cfg.ItemSpawnAttemptDelayMs);
+            for (int i = 0; i < attempts; i++)
             {
-                if (set == null) continue;
-                if (set.Equipment != null)
+                try
                 {
-                    for (int i = 0; i < set.Equipment.Count; i++)
-                        set.Equipment[i] = MapLegacyItemId(set.Equipment[i]);
+                    player.GiveItem(itemId);
+                    return;
                 }
-                if (set.Inventory != null)
+                catch (Exception ex)
                 {
-                    for (int i = 0; i < set.Inventory.Count; i++)
-                        set.Inventory[i] = MapLegacyItemId(set.Inventory[i]);
+                    if (i == attempts - 1)
+                        Console.WriteLine($"[SpawnSystem] Falha ao entregar '{itemId}' para {player.Name} apos {attempts} tentativa(s): {ex.Message}");
                 }
+                if (i < attempts - 1 && between > 0)
+                    await Task.Delay(between);
             }
         }
 
@@ -369,12 +380,12 @@ namespace SpawnSystem
                 {
                     if (!string.IsNullOrWhiteSpace(_cfg.FemaleBraItemId))
                     {
-                        player.EquipItem(_cfg.FemaleBraItemId);
+                        await TryEquipItemWithRetriesAsync(player, _cfg.FemaleBraItemId);
                         if (equipInterval > 0) await Task.Delay(equipInterval);
                     }
                     if (!string.IsNullOrWhiteSpace(_cfg.FemaleUnderwearItemId))
                     {
-                        player.EquipItem(_cfg.FemaleUnderwearItemId);
+                        await TryEquipItemWithRetriesAsync(player, _cfg.FemaleUnderwearItemId);
                         if (equipInterval > 0) await Task.Delay(equipInterval);
                     }
                 }
@@ -382,14 +393,14 @@ namespace SpawnSystem
                 {
                     if (!string.IsNullOrWhiteSpace(_cfg.MaleUnderwearItemId))
                     {
-                        player.EquipItem(_cfg.MaleUnderwearItemId);
+                        await TryEquipItemWithRetriesAsync(player, _cfg.MaleUnderwearItemId);
                         if (equipInterval > 0) await Task.Delay(equipInterval);
                     }
                 }
 
                 if (!string.IsNullOrWhiteSpace(_cfg.SocksItemId))
                 {
-                    player.EquipItem(_cfg.SocksItemId);
+                    await TryEquipItemWithRetriesAsync(player, _cfg.SocksItemId);
                     if (equipInterval > 0) await Task.Delay(equipInterval);
                 }
             }

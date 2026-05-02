@@ -23,6 +23,11 @@ namespace SpawnSystem
         public string VipPrataPermission { get; set; } = "vip.prata";
         public string VipOuroPermission { get; set; } = "vip.ouro";
         public string Message { get; set; } = "Vantagens VIP: Equipamento de triagem inicial entregue com sucesso.";
+        public int InitialRespawnDelayMs { get; set; } = 1000;
+        public int PostInventoryClearDelayMs { get; set; } = 1000;
+        public int PostEquipmentBatchDelayMs { get; set; } = 300;
+        public int ItemSpawnAttemptCount { get; set; } = 3;
+        public int ItemSpawnAttemptDelayMs { get; set; } = 400;
 
         // Default items for regular players
         public SpawnSettings StandardSet { get; set; } = new SpawnSettings
@@ -36,7 +41,7 @@ namespace SpawnSystem
         {
             Equipment = new List<string>
             {
-                "Boonie_Hat_07",
+                "Military_Boonie_Hat_07",
                 "Camouflage_Jacket_01",
                 "Hiking_Boots_03",
                 "Open_Finger_Gloves_01",
@@ -63,7 +68,7 @@ namespace SpawnSystem
         {
             Equipment = new List<string>
             {
-                "Boonie_Hat_07",
+                "Military_Boonie_Hat_07",
                 "Camouflage_Jacket_01",
                 "Hiking_Boots_03",
                 "Open_Finger_Gloves_01",
@@ -90,7 +95,7 @@ namespace SpawnSystem
 
     #endregion
 
-    [Info("Custom Respawn Items", "OUltimoRefugio", "1.3.2")]
+    [Info("Custom Respawn Items", "OUltimoRefugio", "1.3.3")]
     [Description("Gives specific item sets to standard and VIP players upon respawn.")]
     public class CustomRespawnPlugin : OxygenPlugin
     {
@@ -101,10 +106,9 @@ namespace SpawnSystem
         public override void OnLoad()
         {
             _cfg = LoadConfig<RespawnConfig>() ?? new RespawnConfig();
-            MigrateLegacyItemIdsInConfig(_cfg);
             SanitizeVipOuroNoBackpackItems(_cfg);
             SaveConfig(_cfg);
-            Console.WriteLine("[SpawnSystem] Plugin v1.3.2 carregado. Kits: Padrão, Prata e Ouro.");
+            Console.WriteLine("[SpawnSystem] Plugin v1.3.3 carregado. Kits: Padrão, Prata e Ouro.");
         }
 
         #endregion
@@ -122,9 +126,9 @@ namespace SpawnSystem
             {
                 if (player == null || !_cfg.Enabled) return;
 
-                // Aguarda 1 segundo para garantir que o personagem esteja
-                // completamente inicializado no mundo antes de manipular o inventário.
-                await Task.Delay(1000);
+                int initialDelay = Math.Max(0, _cfg.InitialRespawnDelayMs);
+                if (initialDelay > 0)
+                    await Task.Delay(initialDelay);
 
                 // Determina qual kit usar com base na permissão do jogador
                 SpawnSettings selectedSet;
@@ -151,26 +155,32 @@ namespace SpawnSystem
                 // SOMENTE após o delay, quando os slots já estão inicializados
                 player.Inventory.Clear();
 
+                int postClear = Math.Max(0, _cfg.PostInventoryClearDelayMs);
+                if (postClear > 0)
+                    await Task.Delay(postClear);
+
                 // Pequena pausa após o Clear para o servidor processar a limpeza
                 await Task.Delay(300);
 
                 // 1. Equipa roupas e bolsas primeiro (cria espaço no inventário)
                 foreach (var item in selectedSet.Equipment)
                 {
-                    string equipId = MapLegacyItemId(item);
+                    string equipId = item;
                     if (isVipOuro && IsBackpackItemId(equipId)) continue;
-                    player.EquipItem(equipId);
+                    await TryEquipItemWithRetriesAsync(player, equipId);
                 }
 
                 // Pausa para garantir que os slots de roupa estejam prontos
-                await Task.Delay(300);
+                int postEquipBatch = Math.Max(0, _cfg.PostEquipmentBatchDelayMs);
+                if (postEquipBatch > 0)
+                    await Task.Delay(postEquipBatch);
 
                 // 2. Entrega ferramentas e armas no inventário
                 foreach (var item in selectedSet.Inventory)
                 {
-                    string giveId = MapLegacyItemId(item);
+                    string giveId = item;
                     if (isVipOuro && IsBackpackItemId(giveId)) continue;
-                    player.GiveItem(giveId);
+                    await TryGiveItemWithRetriesAsync(player, giveId);
                 }
 
                 // Notifica o jogador VIP
@@ -185,45 +195,52 @@ namespace SpawnSystem
             }
         }
 
+        private async Task TryEquipItemWithRetriesAsync(PlayerBase player, string itemId)
+        {
+            int attempts = Math.Max(1, _cfg.ItemSpawnAttemptCount);
+            int between = Math.Max(0, _cfg.ItemSpawnAttemptDelayMs);
+            for (int i = 0; i < attempts; i++)
+            {
+                try
+                {
+                    player.EquipItem(itemId);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    if (i == attempts - 1)
+                        Console.WriteLine($"[SpawnSystem] Falha ao equipar '{itemId}' apos {attempts} tentativa(s): {ex.Message}");
+                }
+                if (i < attempts - 1 && between > 0)
+                    await Task.Delay(between);
+            }
+        }
+
+        private async Task TryGiveItemWithRetriesAsync(PlayerBase player, string itemId)
+        {
+            int attempts = Math.Max(1, _cfg.ItemSpawnAttemptCount);
+            int between = Math.Max(0, _cfg.ItemSpawnAttemptDelayMs);
+            for (int i = 0; i < attempts; i++)
+            {
+                try
+                {
+                    player.GiveItem(itemId);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    if (i == attempts - 1)
+                        Console.WriteLine($"[SpawnSystem] Falha ao entregar '{itemId}' apos {attempts} tentativa(s): {ex.Message}");
+                }
+                if (i < attempts - 1 && between > 0)
+                    await Task.Delay(between);
+            }
+        }
+
         private static bool IsBackpackItemId(string itemId)
         {
             if (string.IsNullOrWhiteSpace(itemId)) return false;
             return itemId.IndexOf("backpack", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static readonly (string OldId, string NewId)[] LegacyItemIdReplacements =
-        {
-            ("Military_Boonie_Hat_07", "Boonie_Hat_07"),
-        };
-
-        private static string MapLegacyItemId(string itemId)
-        {
-            if (string.IsNullOrWhiteSpace(itemId)) return itemId;
-            foreach (var (oldId, newId) in LegacyItemIdReplacements)
-            {
-                if (itemId.Equals(oldId, StringComparison.OrdinalIgnoreCase))
-                    return newId;
-            }
-            return itemId;
-        }
-
-        private static void MigrateLegacyItemIdsInConfig(RespawnConfig cfg)
-        {
-            if (cfg == null) return;
-            foreach (var set in new[] { cfg.StandardSet, cfg.VipPrataSet, cfg.VipOuroSet })
-            {
-                if (set == null) continue;
-                if (set.Equipment != null)
-                {
-                    for (int i = 0; i < set.Equipment.Count; i++)
-                        set.Equipment[i] = MapLegacyItemId(set.Equipment[i]);
-                }
-                if (set.Inventory != null)
-                {
-                    for (int i = 0; i < set.Inventory.Count; i++)
-                        set.Inventory[i] = MapLegacyItemId(set.Inventory[i]);
-                }
-            }
         }
 
         private static void SanitizeVipOuroNoBackpackItems(RespawnConfig cfg)

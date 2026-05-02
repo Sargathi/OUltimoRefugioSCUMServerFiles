@@ -10,9 +10,14 @@
   "FemaleBraItemId": "F_Undershirt_Bra_01",
   "FemaleUnderwearItemId": "Underpants_01",
   "SocksItemId": "Sock_01",
-  "RespawnSafetyDelayMs": 700,
+  "RespawnSafetyDelayMs": 1200,
   "EquipIntervalMs": 70,
   "GiveItemIntervalMs": 60,
+  "PostInventoryClearDelayMs": 1000,
+  "PostParachuteEquipDelayMs": 450,
+  "PreKitEquipmentDelayMs": 800,
+  "ItemSpawnAttemptCount": 3,
+  "ItemSpawnAttemptDelayMs": 400,
   "WhitelistSet": {
     "Equipment": [
       "Bamboo_Hat_02",
@@ -36,7 +41,7 @@
   },
   "VipPrataSet": {
     "Equipment": [
-      "Boonie_Hat_07",
+      "Military_Boonie_Hat_07",
       "Camouflage_Jacket_01",
       "Hiking_Boots_03",
       "Open_Finger_Gloves_01",
@@ -58,7 +63,7 @@
   },
   "VipOuroSet": {
     "Equipment": [
-      "Boonie_Hat_07",
+      "Military_Boonie_Hat_07",
       "Camouflage_Jacket_01",
       "Hiking_Boots_03",
       "Open_Finger_Gloves_01",
